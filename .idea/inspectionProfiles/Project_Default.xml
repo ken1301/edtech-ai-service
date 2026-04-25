@@ -1,0 +1,57 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="DuplicatedCode" enabled="true" level="WEAK WARNING" enabled_by_default="true">
+      <Languages>
+        <language minSize="46" name="Python" />
+      </Languages>
+    </inspection_tool>
+    <inspection_tool class="Eslint" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="uvicorn" />
+          <option value="psycopg2-binary" />
+          <option value="passlib" />
+          <option value="pyjwt" />
+          <option value="python-multipart" />
+          <option value="yfinance" />
+          <option value="fastapi" />
+          <option value="pydantic" />
+          <option value="bcrypt" />
+          <option value="sqlalchemy" />
+          <option value="jwt" />
+          <option value="cryptography" />
+          <option value="logging" />
+          <option value="aiosqlite" />
+          <option value="greenlet" />
+          <option value="torch" />
+          <option value="torchvision" />
+          <option value="torchaudio" />
+          <option value="pillow" />
+          <option value="ultralytics" />
+          <option value="opencv-python" />
+          <option value="easyocr" />
+          <option value="numpy" />
+          <option value="google-generativeai" />
+          <option value="python-dotenv" />
+          <option value="pandas" />
+          <option value="openai" />
+          <option value="anthropic" />
+          <option value="requests" />
+          <option value="aiohttp" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyPep8NamingInspection" enabled="true" level="WEAK WARNING" enabled_by_default="true">
+      <option name="ignoredErrors">
+        <list>
+          <option value="N801" />
+          <option value="N806" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="SqlNoDataSourceInspection" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="UnsatisfiedRequirementInspection" enabled="true" level="INFORMATION" enabled_by_default="true" />
+  </profile>
+</component>
