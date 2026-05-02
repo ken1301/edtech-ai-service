@@ -10,8 +10,8 @@ from infrastructure.logging import logger
 class SessionManager:
     """Manages chat session lifecycle and context compression."""
 
-    SESSION_TIMEOUT_SECONDS = 3600  # 1 hour
-    COMPRESSION_THRESHOLD = 20      # compress when turn count exceeds this
+    SESSION_TIMEOUT_SECONDS = 60 * 60 * 0.1  # 1 hour
+    COMPRESSION_THRESHOLD = 10      # compress when turn count exceeds this
     MESSAGES_TO_COMPRESS = 10       # summarise the oldest N messages
     MESSAGES_TO_KEEP = 10           # keep the most recent N messages verbatim
 
@@ -67,7 +67,7 @@ class SessionManager:
         await self.session_store.clear_session(session_id)
 
         # Re-insert summary as a system message placeholder
-        summary_msg = Message(role=Role.SYSTEM, content=f"[Tóm tắt buổi học trước]: {summary_text}")
+        summary_msg = Message(role=Role.SYSTEM, content=f"[Tóm tắt những tin nhắn trước]: {summary_text}")
         await self.session_store.save_message(session_id, summary_msg)
 
         for msg in recent_messages:

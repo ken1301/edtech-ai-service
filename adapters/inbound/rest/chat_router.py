@@ -3,7 +3,7 @@ from dependency_injector.wiring import inject, Provide
 
 from adapters.inbound.rest.schemas import ChatRequest
 from infrastructure.container import Container
-from application.services.chatbot_manager import ChatbotManager
+from application.use_cases.chatbot_usecase import ChatbotManager
 from domain.exceptions import SessionExpiredError
 from domain.models.response import ChatResponse
 

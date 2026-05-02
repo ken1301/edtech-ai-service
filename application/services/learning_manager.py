@@ -36,6 +36,8 @@ class LearningUseCase:
         """Summarise session, persist learning data to profile, then clear session cache."""
         history = await self.session_store.get_history(session_id)
 
+        print(history)
+
         description = "EMPTY_HISTORY"
 
         if history:

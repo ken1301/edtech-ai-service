@@ -7,11 +7,12 @@ from adapters.outbound.cache.redis_adapter import RedisAdapter
 from adapters.outbound.persistence.mongo_profile_store import MongoProfileStore
 from adapters.outbound.persistence.mongo_session_store import MongoSessionStore
 
-from application.use_cases.chat_usecase import SocraticChat
-from application.use_cases.learning_usecase import LearningUseCase
+from application.services.chat_manager import SocraticChat
+from application.services.learning_manager import LearningUseCase
 from application.services.session_manager import SessionManager
 from application.services.prompt_manager import PromptManager
-from application.services.chatbot_manager import ChatbotManager
+
+from application.use_cases.chatbot_usecase import ChatbotManager
 
 
 class Container(containers.DeclarativeContainer):

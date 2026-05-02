@@ -1,4 +1,7 @@
+import logging
 import structlog
+from logging.handlers import RotatingFileHandler
+
 from infrastructure.observability.middleware import correlation_id_ctx
 
 
@@ -8,6 +11,15 @@ def _inject_correlation_id(logger, method, event_dict):
 
 
 def setup_logging():
+    file_handler = RotatingFileHandler(
+        "app.log", maxBytes=10*1024*1024, backupCount=5, encoding="utf-8"
+    )
+
+    logging.basicConfig(
+        handlers=[file_handler, logging.StreamHandler()], # Ghi cả vào file và console
+        level=logging.INFO
+    )
+    
     structlog.configure(
         processors=[
             structlog.stdlib.add_log_level,

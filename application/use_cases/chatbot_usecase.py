@@ -4,8 +4,8 @@ from domain.exceptions import SessionExpiredError
 from domain.models.profile import Subject
 from domain.models.response import ChatResponse
 
-from application.use_cases.chat_usecase import SocraticChat
-from application.use_cases.learning_usecase import LearningUseCase
+from application.services.chat_manager import SocraticChat
+from application.services.learning_manager import LearningUseCase
 from application.services.session_manager import SessionManager
 from application.services.prompt_manager import PromptManager
 

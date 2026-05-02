@@ -25,6 +25,7 @@ class PromptManager:
         if not profile:
             return (
                 "Đây là học sinh mới, chưa có thông tin về điểm mạnh hay điểm yếu trong môn học này.\n"
+                f"Chủ đề đang học: {subject.value} - {topic}.\n"
                 "------------------------------------\n"
             )
 
