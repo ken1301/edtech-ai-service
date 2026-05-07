@@ -1,13 +1,26 @@
-class SessionExpiredError(Exception):
-    """Raised when a session has expired."""
-    pass
-
-
 class LLMError(Exception):
     """Raised when the LLM fails to generate a response."""
     pass
 
-
-class ProfileNotFoundError(Exception):
-    """Raised when a student profile is not found."""
+class AuthorizationError(Exception):
+    """Raised when user authorization fails."""
     pass
+
+class CompressSessionHistoryError(Exception):
+    """Raised when session history compression fails."""
+    pass
+
+class SyncAndCloseSessionError(Exception):
+    """Raised when syncing and closing session fails."""
+    pass
+
+class SessionExpiredError(Exception):
+    """Raised when a session has expired and can no longer be used."""
+    pass
+
+class PromptGenerationError(Exception):
+    """Raised when prompt generation fails."""
+    pass
+
+
+

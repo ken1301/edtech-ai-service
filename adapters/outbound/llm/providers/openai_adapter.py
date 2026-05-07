@@ -9,7 +9,7 @@ from domain.models.response import LLMResponse, TokenUsage
 class OpenaiAdapter(LLMPort):
     """OpenAI LLM adapter implementation"""
     
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: str, model: str = "gpt-5.4-nano"):
         """Initialize OpenAI adapter
         
         Args:
@@ -40,12 +40,16 @@ class OpenaiAdapter(LLMPort):
         for m in messages:
             formatted_messages.append({"role": m.role.value, "content": m.content})
 
+        temperature = context.temperature if context else 0.3
         max_tokens = context.max_completion_tokens if context else None
+        response_format = context.response_format if context else "text"
 
         api_params = {
             "model": self.model,
             "messages": formatted_messages,
-            "max_tokens": max_tokens,
+            "max_completion_tokens": max_tokens,
+            "response_format": response_format,
+            "temperature": temperature
         }
 
         response = await self.client.chat.completions.create(**api_params)
