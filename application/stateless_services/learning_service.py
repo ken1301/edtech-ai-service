@@ -37,25 +37,6 @@ class LearningService:
         self._session_manager = session_manager
         self._prompt_builder = prompt_builder
         self._profile_manager = profile_manager
-
-    async def _extract_summary_response(
-        self, 
-        session_id: str, 
-        response_content: str
-    ) -> tuple:
-        try:
-            data = json.loads(response_content)
-            return (
-                data.get("student_preference", {}),
-                data.get("knowledge_map", {})
-            )
-        except json.JSONDecodeError:
-            logger.warning(
-                "learning.extract_summary.parse_failed — fallback to empty",
-                log_type="technical",
-                session_id=session_id,
-            )
-            return {}, {}
         
 
     async def sync_and_close_session(
@@ -89,19 +70,19 @@ class LearningService:
             )
             
             # 3. Save the student preference and knowledge map to MongoDB
-            student_preference, knowledge_map = await self._extract_summary_response(
-                session_id=session_id, 
-                response_content=summary_response.content
-            )
+            student_preference = summary_response.content.student_preference
+            topic_mastery = summary_response.content.topic_mastery
             await self._profile_manager.update_student_profile(
                 student_id=student_id,
+                subject=subject,
+                topic=topic,
                 student_preference=student_preference,
-                knowledge_map=knowledge_map
+                topic_mastery=topic_mastery
             )
 
             # 4. Disable session and delete the session data from Redis to free up memory
             metadata["is_active"] = False
-            await self._session_manager.save_metadata(session_id, metadata)
+            await self._session_manager.redis_save_metadata(session_id, metadata)
             await self._session_manager.redis_delete_session(session_id)
 
             logger.info(
@@ -163,7 +144,7 @@ class LearningService:
             # 4. Update the session metadata and save it to Redis
             metadata["summary"] = metadata["summary"] + "\n" + compress_context.content
             metadata["turn_count"] -= TURN_TO_COMPRESS
-            await self._session_manager.save_metadata(session_id, metadata)
+            await self._session_manager.redis_save_metadata(session_id, metadata)
 
             logger.info(
                 "compress_history.completed",
@@ -183,6 +164,7 @@ class LearningService:
             )
             raise CompressSessionHistoryError("LLM failed during history compression.") from e
 
+
         except PromptGenerationError as e:
             logger.error(
                 "compress_history.prompt.failed",
@@ -191,6 +173,7 @@ class LearningService:
                 error=str(e),
             )
             raise CompressSessionHistoryError("Failed to generate compression prompt.") from e
+
 
         except Exception as e:
             logger.error(
