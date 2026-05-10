@@ -3,8 +3,7 @@ from dependency_injector.wiring import inject, Provide
 
 from adapters.inbound.rest.schemas import ChatRequest
 from infrastructure.container import Container
-from application.use_cases.chatbot_usecase import ChatbotManager
-from domain.exceptions import SessionExpiredError
+from application.use_cases.chatbot_usecase import ChatbotUseCase
 from domain.models.response import ChatResponse
 
 router = APIRouter()
@@ -15,7 +14,7 @@ router = APIRouter()
 async def chat(
     request: ChatRequest,
     background_tasks: BackgroundTasks,
-    chatbot_manager: ChatbotManager = Depends(Provide[Container.chatbot_manager]),
+    chatbot_manager: ChatbotUseCase = Depends(Provide[Container.chatbot_manager]),
 ) -> ChatResponse:
     if not request.message.strip():
         raise HTTPException(
@@ -24,20 +23,19 @@ async def chat(
         )
 
     try:
-        response = await chatbot_manager.handle_chat(
+        print(f"Received chat request: {request}")
+        response = await chatbot_manager.run(
             student_id=request.user_id,
             session_id=request.session_id,
+            correlation_id=request.corr_id,
+            student_message=request.message,
             subject=request.subject,
+            background_task=background_tasks,
             topic=request.topic,
-            user_message=request.message,
-            corr_id=request.corr_id,
-            lang=request.lang,
-            background_tasks=background_tasks,
         )
+
         return response
 
-    except SessionExpiredError as e:
-        raise HTTPException(status_code=440, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -1,3 +1,4 @@
+from pydantic import BaseModel
 from abc import ABC, abstractmethod
 from typing import List, Optional
 from domain.models.message import Message, ConversationContext
@@ -11,7 +12,8 @@ class LLMPort(ABC):
         self,
         system_prompt: str,
         messages: List[Message],
-        context: Optional[ConversationContext] = None
+        context: Optional[ConversationContext] = None,
+        response_model: Optional[BaseModel] = None
     ) -> LLMResponse:
         """Generate a response from the LLM"""
         pass

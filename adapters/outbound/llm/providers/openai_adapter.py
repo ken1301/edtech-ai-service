@@ -1,11 +1,15 @@
+import openai
 from openai import AsyncOpenAI
 import instructor
 from pydantic import BaseModel
 from typing import List, Optional
 
+from domain.exceptions import LLMError
 from domain.ports.llm_port import LLMPort
 from domain.models.message import Message, ConversationContext
 from domain.models.response import LLMResponse, TokenUsage
+
+from infrastructure.logging import logger
 
 
 class OpenaiAdapter(LLMPort):
@@ -39,35 +43,76 @@ class OpenaiAdapter(LLMPort):
         Returns:
             LLMResponse with content and token usage
         """
-        formatted_messages = [{"role": "system", "content": system_prompt}]
 
-        for m in messages:
-            formatted_messages.append({"role": m.role.value, "content": m.content})
+        try:
+            formatted_messages = [{"role": "system", "content": system_prompt}]
 
-        temperature = context.temperature if context else 0.3
-        max_tokens = context.max_completion_tokens if context else None
-        response_format = context.response_format if context else "text"
+            for m in messages:
+                formatted_messages.append({"role": m.role.value, "content": m.content})
 
-        api_params = {
-            "model": self.model,
-            "messages": formatted_messages,
-            "max_completion_tokens": max_tokens,
-            "response_format": response_format,
-            "temperature": temperature
-        }
+            temperature = context.temperature if context else 0.3
+            max_tokens = context.max_completion_tokens if context else None
 
-        response, completion = await self.client.chat.completions.create_with_completion(**api_params)
+            api_params = {
+                "model": self.model,
+                "messages": formatted_messages,
+                "max_completion_tokens": max_tokens,
+                "response_model": response_model,
+                "temperature": temperature
+            }
 
-        return LLMResponse(
-            content=response,
-            model_name=completion.model,
-            finish_reason=completion.choices[0].finish_reason,
-            usage=TokenUsage(
-                prompt_tokens=completion.usage.prompt_tokens,
-                completion_tokens=completion.usage.completion_tokens,
-                total_tokens=completion.usage.total_tokens
+            response, completion = await self.client.chat.completions.create_with_completion(**api_params)
+
+            return LLMResponse(
+                content=response,
+                model_name=completion.model,
+                finish_reason=completion.choices[0].finish_reason,
+                usage=TokenUsage(
+                    prompt_tokens=completion.usage.prompt_tokens,
+                    completion_tokens=completion.usage.completion_tokens,
+                    total_tokens=completion.usage.total_tokens
+                )
             )
-        )
+        
+        except openai.RateLimitError as e:
+            logger.warning(
+                "openai_adapter.rate_limit",
+                log_type="technical",
+                error=str(e),
+            )
+            raise LLMError("OpenAI API rate limit exceeded. Please try again later.") from e
+        
+        except openai.AuthenticationError as e:
+            logger.error(
+                "openai_adapter.authentication_failed",
+                log_type="technical",
+                error=str(e),
+            )
+            raise LLMError("OpenAI API authentication failed. Check your API key.") from e
+        
+        except openai.BadRequestError as e: 
+            logger.error(
+                "openai_adapter.bad_request",
+                log_type="technical",
+                error=str(e),
+            )
+            raise LLMError("OpenAI API bad request. Check your input parameters.") from e
+        
+        except openai.OpenAIError as e:
+            logger.error(
+                "openai_adapter.api_error",
+                log_type="technical",
+                error=str(e),
+            )
+            raise LLMError("OpenAI API error occurred. Please try again later.") from e
+        
+        except Exception as e:
+            logger.error(
+                "openai_adapter.unknown_error",
+                log_type="technical",
+                error=str(e),
+            )
+            raise LLMError("An unknown error occurred while calling OpenAI API.") from e
 
     async def generate_stream(
             self,

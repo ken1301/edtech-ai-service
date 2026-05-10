@@ -1,47 +1,152 @@
-from motor.motor_asyncio import AsyncIOMotorClient
-from typing import Optional
+from datetime import datetime, timezone
+
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.errors import PyMongoError
 
 from domain.ports.profile_store_port import ProfileStorePort
-from domain.models.profile import StudentProfile
+from domain.models.profile import (
+    StudentProfile,
+    TopicMastery,
+    StudentPreference,
+    Subject,
+)
+from domain.exceptions import ProfileStoreError
+
+from infrastructure.logging import logger
 
 
-class MongoProfileStore(ProfileStorePort):
-    """MongoDB adapter for student profile persistence."""
+class MongoProfileAdapter(ProfileStorePort):
+    """
+    MongoDB adapter for student profile storage.
 
-    def __init__(self, url: str, db_name: str):
-        self._client = AsyncIOMotorClient(url)
-        self._db = self._client[db_name]
-        self._collection = self._db["student_profiles"]
+    Collection: `student_profiles`
 
-    async def get_student_profile(self, student_id: str) -> Optional[StudentProfile]:
-        doc = await self._collection.find_one({"_id": student_id})
+    Document shape:
+    {
+        "_id": ObjectId,
+        "student_id": str  (unique index),
+        "full_name": str | None,
+        "grade": str | None,
+        "preferences": {StudentPreference fields},
+        "knowledge_map": {
+            "math": {
+                "fractions": {TopicMastery fields},
+                ...
+            },
+            "physics": { ... },
+        },
+        "created_at": datetime,
+        "updated_at": datetime
+    }
+    """
+
+    _COLLECTION = "student_profiles"
+
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self._col = db[self._COLLECTION]
+
+    # ── ProfileStorePort interface ────────────────────────────────────────────
+
+    async def get_student_profile(self, student_id: str) -> StudentProfile | None:
+        """Return the student profile document, or None if not found."""
+        try:
+            doc = await self._col.find_one({"student_id": student_id})
+        except PyMongoError as e:
+            logger.error(
+                "mongo_profile_adapter.get_student_profile.failed",
+                log_type="technical",
+                student_id=student_id,
+                error=str(e),
+            )
+            raise ProfileStoreError(
+                f"Failed to fetch profile for student '{student_id}' from MongoDB."
+            ) from e
+
         if not doc:
+            logger.warning(
+                "mongo_profile_adapter.get_student_profile.not_found",
+                log_type="technical",
+                student_id=student_id,
+            )
             return None
-        return StudentProfile(**doc)
 
-    async def update_student_preferences(self, student_id: str, data: dict) -> bool:
-        result = await self._collection.update_one(
-            {"_id": student_id},
-            {"$set": {"preferences": data}},
+        try:
+            return self._deserialize_profile(doc)
+        except (KeyError, TypeError, ValueError) as e:
+            logger.error(
+                "mongo_profile_adapter.get_student_profile.deserialize_failed",
+                log_type="technical",
+                student_id=student_id,
+                error=str(e),
+            )
+            raise ProfileStoreError(
+                f"Corrupt profile document for student '{student_id}'."
+            ) from e
+
+    async def update_student_profile(
+        self,
+        student_id: str,
+        subject: Subject,
+        topic: str,
+        student_preference: StudentPreference,
+        topic_mastery: TopicMastery,
+    ) -> None:
+        """
+        Upsert a student profile.
+        - Merges the new topic mastery into the existing knowledge map via
+          dot-notation so other subjects/topics are never overwritten.
+        - Overwrites the preference block with the latest observed values.
+        """
+        now = datetime.now(timezone.utc)
+
+        update = {
+            "$set": {
+                f"knowledge_map.{subject.value}.{topic}": topic_mastery.model_dump(),
+                "preferences": student_preference.model_dump(),
+                "updated_at":  now,
+            },
+            "$setOnInsert": {
+                "student_id": student_id,
+                "created_at": now,
+            },
+        }
+
+        try:
+            await self._col.update_one(
+                {"student_id": student_id},
+                update,
+                upsert=True,
+            )
+        except PyMongoError as e:
+            logger.error(
+                "mongo_profile_adapter.update_student_profile.failed",
+                log_type="technical",
+                student_id=student_id,
+                subject=subject.value,
+                topic=topic,
+                error=str(e),
+            )
+            raise ProfileStoreError(
+                f"Failed to update profile for student '{student_id}' in MongoDB."
+            ) from e
+
+    # ── helpers ───────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _deserialize_profile(doc: dict) -> StudentProfile:
+        return StudentProfile(
+            student_id=doc["student_id"],
+            full_name=doc.get("full_name"),
+            grade=doc.get("grade"),
+            preferences=(
+                StudentPreference(**doc["preferences"])
+                if doc.get("preferences") else None
+            ),
+            knowledge_map={
+                subject: {
+                    topic: TopicMastery(**mastery)
+                    for topic, mastery in topics.items()
+                }
+                for subject, topics in doc.get("knowledge_map", {}).items()
+            },
         )
-        return result.modified_count > 0
-
-    async def update_knowledge_map(self, student_id: str, subject: str, topic: str, data: dict) -> bool:
-        update_path = f"knowledge_map.{subject}.{topic}"
-        result = await self._collection.update_one(
-            {"_id": student_id},
-            {"$set": {update_path: data}},
-        )
-        return result.modified_count > 0
-
-    async def save_profile(self, profile: StudentProfile) -> bool:
-        data = profile.model_dump(by_alias=True)
-        result = await self._collection.replace_one(
-            {"_id": data["_id"]},
-            data,
-            upsert=True,
-        )
-        return result.acknowledged
-
-    def close(self):
-        self._client.close()

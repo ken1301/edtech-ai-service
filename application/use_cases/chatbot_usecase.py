@@ -14,10 +14,13 @@ from application.services.prompt_builder import PromptBuilder
 from application.stateless_services.learning_service import LearningService
 
 from domain.exceptions import (
-    LLMError,
+    ChatServiceError,
+    ProfileManagerError,
+    SessionManagerError,    
+    PromptGenerationError,
     AuthorizationError,
     SyncAndCloseSessionError,
-    CompressSessionHistoryError
+    CompressSessionHistoryError,
 )
 
 from infrastructure.logging import logger
@@ -48,7 +51,7 @@ class ChatbotUseCase:
 
 
     @staticmethod
-    async def _if_valid_data(student_id: str, metadata: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
+    def _if_valid_data(student_id: str, metadata: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
         # Placeholder for actual validation logic (e.g., check if user exists, session is active, etc.)
         if not metadata: 
             raise AuthorizationError("Session not found.")
@@ -72,7 +75,7 @@ class ChatbotUseCase:
         try:
             # 1. Look for session metadata & 2. Validate session and user data
             metadata = await self._session_manager.redis_get_metadata(session_id)
-            await self._if_valid_data(metadata, student_id)
+            self._if_valid_data(student_id, metadata)
 
             # 3. Check if the session is active
             is_active = metadata["is_active"]
@@ -121,11 +124,10 @@ class ChatbotUseCase:
                 # await self._session_manager.redis_save_metadata(session_id, metadata)
                 
                 metadata = await self._learning_service.compress_session_history(
-                    student_id=student_id,
                     session_id=session_id,
                     metadata=metadata,
                     MSG_TO_COMPRESS=self.TURN_TO_COMPRESS * self.MSG_PER_TURN,
-                    TURN_TO_COMPRESS=self.TURN_TO_KEEP 
+                    TURN_TO_COMPRESS=self.TURN_TO_COMPRESS,
                 )
 
             # 6. Get history messages
@@ -194,16 +196,52 @@ class ChatbotUseCase:
                 detail="Authorization failed for this session.",
             )
         
-        except LLMError as e:
+        except PromptGenerationError as e:
             logger.error(
-                "chatbot.llm.response_generation.failed",
+                "chatbot.prompt_generation.failed",
                 session_id=session_id,
                 log_type="technical",
                 error=str(e),
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="LLM response generation failed during chatbot response generation.",
+                detail="Prompt generation failed during chatbot response generation.",
+            )
+        
+        except ChatServiceError as e:
+            logger.error(
+                "chatbot.chat_service.failed",
+                session_id=session_id,
+                log_type="technical",
+                error=str(e),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Chat service failed during chatbot response generation.",
+            )
+        
+        except SessionManagerError as e:
+            logger.error(
+                "chatbot.session_manager.failed",
+                session_id=session_id,
+                log_type="technical",
+                error=str(e),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Session manager failed during chatbot response generation.",
+            )
+        
+        except ProfileManagerError as e:
+            logger.error(
+                "chatbot.profile_manager.failed",
+                session_id=session_id,
+                log_type="technical",
+                error=str(e),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Profile manager failed during chatbot response generation.",
             )
         
         except SyncAndCloseSessionError as e:

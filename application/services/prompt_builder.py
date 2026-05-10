@@ -1,24 +1,30 @@
 import json
+from pathlib import Path
 
 from domain.ports.profile_store_port import ProfileStorePort
 
 from domain.models.profile import Subject, StudentProfile
 
-from domain.exceptions import PromptGenerationError
+from domain.exceptions import PromptGenerationError, ProfileStoreError
 
 from infrastructure.logging import logger
 
 class PromptBuilder:
     """Service responsible for building prompts for the LLM based on the student profile, prompt templates."""
 
-    with open("./docs/prompt_templates/thinking_prompt.json", "r", encoding="utf-8") as f:
-        THINKING_PROMPT = json.load(f)
+    _PROMPT_TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "docs" / "prompt_templates"
 
-    with open("./docs/prompt_templates/answering_prompt.json", "r", encoding="utf-8") as f:
-        ANSWERING_PROMPT = json.load(f)
+    with open(_PROMPT_TEMPLATE_DIR / "thinking_prompt.txt", "r", encoding="utf-8") as f:
+        THINKING_PROMPT = f.read()
 
-    with open("./docs/prompt_templates/learning_service_prompt.json", "r", encoding="utf-8") as f:
-        LEARNING_SERVICE_PROMPT = json.load(f)
+    with open(_PROMPT_TEMPLATE_DIR / "answering_prompt.txt", "r", encoding="utf-8") as f:
+        ANSWERING_PROMPT = f.read()
+
+    with open(_PROMPT_TEMPLATE_DIR / "compress_context_prompt.txt", "r", encoding="utf-8") as f:
+        COMPRESS_CONTEXT_PROMPT = f.read()
+
+    with open(_PROMPT_TEMPLATE_DIR / "summarize_session_prompt.txt", "r", encoding="utf-8") as f:
+        SUMMARIZE_SESSION_PROMPT = f.read()
 
     def __init__(
         self,
@@ -27,7 +33,7 @@ class PromptBuilder:
         self._profile_store = profile_store
 
     @staticmethod
-    async def _get_student_context(
+    def _get_student_context(
         student_profile: StudentProfile,
         student_id: str,
         subject: Subject,
@@ -63,6 +69,8 @@ class PromptBuilder:
                 f"Knowledge about {subject.value}: {subject_knowledge}.\n"
                 f"Knowledge about other subjects: {other_subjects}.\n"
             )
+
+            return context
                     
         
         except Exception as e:
@@ -84,24 +92,37 @@ class PromptBuilder:
     ) -> str:
         try:
             student_profile = await self._profile_store.get_student_profile(student_id)
-            systemp_prompt = self._get_student_context(student_profile, student_id, subject, topic)
+            system_prompt = self._get_student_context(student_profile, student_id, subject, topic)
 
-            systemp_prompt += "\n\n" + self.THINKING_PROMPT["system_prompt"] + "\n\n" + self.ANSWERING_PROMPT["system_prompt"]
+            system_prompt += "\n\n" + self.THINKING_PROMPT + "\n\n" + self.ANSWERING_PROMPT
 
             logger.info(
                 "prompt_builder.chatbot_system_prompt.completed",
                 log_type="business",
             )
-            return systemp_prompt
+            return system_prompt
         
-        except Exception as e:
+        except ProfileStoreError as e:
             logger.error(
                 "prompt_builder.chatbot_system_prompt.failed",
                 log_type="technical",
+                student_id=student_id,
+                subject=subject.value,
+                topic=topic,
                 error=str(e),
             )
             raise PromptGenerationError("Failed to generate chatbot system prompt.") from e
-    
+        
+        except Exception as e:
+            logger.error(
+                "prompt_builder.chatbot_system_prompt.unexpected.failed",
+                log_type="technical",
+                student_id=student_id,
+                subject=subject.value,
+                topic=topic,
+                error=str(e),
+            )
+            raise PromptGenerationError("Unexpected error during chatbot system prompt generation.") from e
 
     async def summarize_session_prompt(self) -> str:
         try: 
@@ -109,7 +130,7 @@ class PromptBuilder:
                 "prompt_builder.summarize_session_prompt.completed",
                 log_type="business",
             )
-            return self.LEARNING_SERVICE_PROMPT["summarize_session_system_prompt"]
+            return self.SUMMARIZE_SESSION_PROMPT
         
         except Exception as e:
             logger.error(
@@ -125,7 +146,7 @@ class PromptBuilder:
                 "prompt_builder.compress_history_prompt.completed",
                 log_type="business",
             )
-            return self.LEARNING_SERVICE_PROMPT["compress_history_system_prompt"]
+            return self.COMPRESS_CONTEXT_PROMPT
         
         except Exception as e:
             logger.error(

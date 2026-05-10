@@ -2,6 +2,18 @@ class LLMError(Exception):
     """Raised when the LLM fails to generate a response."""
     pass
 
+class SessionStoreError(Exception):
+    """Raised when there is an error interacting with the session store."""
+    pass
+
+class ProfileStoreError(Exception):
+    """Raised when there is an error interacting with the profile store."""
+    pass
+
+class ChatServiceError(Exception):
+    """Raised when there is an error in the ChatService."""
+    pass
+
 class AuthorizationError(Exception):
     """Raised when user authorization fails."""
     pass
@@ -12,10 +24,6 @@ class CompressSessionHistoryError(Exception):
 
 class SyncAndCloseSessionError(Exception):
     """Raised when syncing and closing session fails."""
-    pass
-
-class SessionExpiredError(Exception):
-    """Raised when a session has expired and can no longer be used."""
     pass
 
 class PromptGenerationError(Exception):
@@ -30,6 +38,9 @@ class ProfileManagerError(Exception):
     """Raised when there is an error in fetching student profile."""
     pass
 
+class ChatBotUseCaseError(Exception):
+    """Raised when there is an error in the chatbot use case."""
+    pass
 
 
 

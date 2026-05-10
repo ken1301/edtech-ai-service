@@ -2,7 +2,7 @@ from domain.ports.profile_store_port import ProfileStorePort
 
 from domain.models.profile import TopicMastery, StudentPreference, Subject
 
-from domain.exceptions import ProfileManagerError
+from domain.exceptions import ProfileManagerError, ProfileStoreError
 
 from infrastructure.logging import logger
 
@@ -33,7 +33,7 @@ class ProfileManager:
                 topic_mastery=topic_mastery
             )
         
-        except Exception as e:
+        except ProfileStoreError as e:
             logger.error(
                 "profile_manager.update_student_profile.failed",
                 log_type="technical",
@@ -43,3 +43,14 @@ class ProfileManager:
                 error=str(e),
             )
             raise ProfileManagerError("Failed to update student profile in the profile store.") from e
+        
+        except Exception as e:
+            logger.error(
+                "profile_manager.update_student_profile.unexpected.failed",
+                log_type="technical",
+                student_id=student_id,
+                subject=subject,
+                topic=topic,
+                error=str(e),
+            )
+            raise ProfileManagerError("Unexpected error while updating student profile.") from e

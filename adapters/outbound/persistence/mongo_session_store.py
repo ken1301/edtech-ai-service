@@ -1,55 +1,164 @@
-from motor.motor_asyncio import AsyncIOMotorClient
-from typing import Any, Dict, List
+from datetime import datetime, timezone
+
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.errors import PyMongoError
 
 from domain.ports.session_store_port import SessionStorePort
-from domain.models.message import Message
+from domain.models.message import Message, Role
+from domain.models.profile import Subject
+from domain.exceptions import SessionStoreError
+
+from infrastructure.logging import logger
 
 
-class MongoSessionStore(SessionStorePort):
-    """MongoDB adapter for long-term session/conversation persistence.
+class MongoSessionAdapter(SessionStorePort):
+    """
+    MongoDB adapter for long-term session message storage.
 
-    Use this when you need durable session storage (e.g. for audit or replay).
-    For hot-path in-flight sessions, prefer RedisAdapter.
+    Collection: `session_messages`
+
+    Document shape:
+    {
+        "_id": ObjectId,
+        "session_id": str,
+        "student_id": str,
+        "subject": str,
+        "topic": str,
+        "messages": [
+            {"role": str, "content": str, "correlation_id": str | None}
+        ],
+        "created_at": datetime
+    }
+
+    A session may accumulate multiple documents over its lifetime
+    (one per compress_session_history call + one final sync_and_close call).
+    get_history_messages() merges them all in insertion order.
     """
 
-    def __init__(self, url: str, db_name: str):
-        self._client = AsyncIOMotorClient(url)
-        self._db = self._client[db_name]
-        self._messages = self._db["session_messages"]
-        self._metadata = self._db["session_metadata"]
+    _COLLECTION = "session_messages"
 
-    async def get_history(self, session_id: str) -> List[Message]:
-        cursor = self._messages.find(
-            {"session_id": session_id},
-            sort=[("created_at", 1)],
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self._col = db[self._COLLECTION]
+
+    # ── helpers ───────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _serialize_message(msg: Message) -> dict:
+        return {
+            "role":           msg.role.value,
+            "content":        msg.content,
+            "correlation_id": msg.correlation_id,
+        }
+
+    @staticmethod
+    def _deserialize_message(data: dict) -> Message:
+        return Message(
+            role=Role(data["role"]),
+            content=data["content"],
+            correlation_id=data.get("correlation_id"),
         )
-        docs = await cursor.to_list(length=None)
-        return [Message(**doc) for doc in docs]
 
-    async def save_message(self, session_id: str, message: Message) -> bool:
-        data = message.model_dump()
-        data["session_id"] = session_id
-        await self._messages.insert_one(data)
-        return True
+    # ── SessionStorePort interface ────────────────────────────────────────────
 
-    async def get_metadata(self, session_id: str) -> Dict[str, Any]:
-        doc = await self._metadata.find_one({"_id": session_id})
-        if not doc:
-            return {}
-        doc.pop("_id", None)
-        return doc
+    async def save_messages(
+        self,
+        student_id: str,
+        session_id: str,
+        messages: list[Message],
+        subject: Subject,
+        topic: str,
+    ) -> None:
+        """Persist a batch of messages to MongoDB (called during compression or session close)."""
+        if not messages:
+            logger.warning(
+                "mongo_session_adapter.save_messages.empty",
+                log_type="technical",
+                session_id=session_id,
+                student_id=student_id,
+            )
+            return
 
-    async def save_metadata(self, session_id: str, metadata: Dict[str, Any]) -> bool:
-        result = await self._metadata.replace_one(
-            {"_id": session_id},
-            {"_id": session_id, **metadata},
-            upsert=True,
-        )
-        return result.acknowledged
+        doc = {
+            "session_id": session_id,
+            "student_id": student_id,
+            "subject":    subject.value,
+            "topic":      topic,
+            "messages":   [self._serialize_message(m) for m in messages],
+            "created_at": datetime.now(timezone.utc),
+        }
 
-    async def clear_session(self, session_id: str) -> None:
-        await self._messages.delete_many({"session_id": session_id})
-        await self._metadata.delete_one({"_id": session_id})
+        try:
+            await self._col.insert_one(doc)
+        except PyMongoError as e:
+            logger.error(
+                "mongo_session_adapter.save_messages.failed",
+                log_type="technical",
+                session_id=session_id,
+                student_id=student_id,
+                subject=subject.value,
+                topic=topic,
+                message_count=len(messages),
+                error=str(e),
+            )
+            raise SessionStoreError(
+                f"Failed to save messages for session '{session_id}' to MongoDB."
+            ) from e
 
-    def close(self):
-        self._client.close()
+    async def get_history_messages(self, session_id: str) -> list[Message]:
+        """
+        Retrieve all messages for a session from MongoDB, sorted by insertion time.
+        Merges multiple documents (from separate compress batches) in order.
+        """
+        try:
+            cursor = self._col.find(
+                {"session_id": session_id},
+                sort=[("created_at", 1)],
+            )
+
+            all_messages: list[Message] = []
+            async for doc in cursor:
+                for raw_msg in doc.get("messages", []):
+                    all_messages.append(self._deserialize_message(raw_msg))
+
+        except PyMongoError as e:
+            logger.error(
+                "mongo_session_adapter.get_history_messages.failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+            )
+            raise SessionStoreError(
+                f"Failed to retrieve history messages for session '{session_id}' from MongoDB."
+            ) from e
+
+        if not all_messages:
+            logger.warning(
+                "mongo_session_adapter.get_history_messages.empty",
+                log_type="technical",
+                session_id=session_id,
+            )
+
+        return all_messages
+
+    # ── Methods not applicable to MongoDB ────────────────────────────────────
+
+    async def get_metadata(self, *args, **kwargs):
+        raise NotImplementedError("get_metadata is a Redis operation.")
+
+    async def save_metadata(self, *args, **kwargs):
+        raise NotImplementedError("save_metadata is a Redis operation.")
+
+    async def save_turn(self, *args, **kwargs):
+        raise NotImplementedError("save_turn is a Redis operation.")
+
+    async def get_right(self, *args, **kwargs):
+        raise NotImplementedError("get_right is a Redis operation.")
+
+    async def get_left(self, *args, **kwargs):
+        raise NotImplementedError("get_left is a Redis operation.")
+
+    async def delete_left(self, *args, **kwargs):
+        raise NotImplementedError("delete_left is a Redis operation.")
+
+    async def delete_session(self, *args, **kwargs):
+        raise NotImplementedError("delete_session is a Redis operation.")

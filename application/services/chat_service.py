@@ -8,7 +8,7 @@ from domain.models.message import Message, ConversationContext
 
 from infrastructure.logging import logger
 
-from domain.exceptions import LLMError
+from domain.exceptions import LLMError, ChatServiceError
 
 class ChatService:
     """Service responsible for handling chat-related operations, such as generating chatbot responses and managing conversation context."""
@@ -33,21 +33,29 @@ class ChatService:
             )
             
             logger.info(
-                "llm.generate_response.completed",
+                "chat_service.generate_response.completed",
                 log_type="business",
             )
 
             return llm_response
+        
+        except LLMError as e:
+            logger.error(
+                "chat_service.generate_response.failed",
+                log_type="technical",
+                error=str(e),
+            )
+            raise ChatServiceError("Failed to generate chatbot response from LLM.") from e
 
         # some specific exceptions can be caught and re-raised as LLMError for better error handling in the use case layer
 
         except Exception as e:
             logger.error(
-                "llm.unexpected.failed",
+                "chat_service.generate_response.unexpected.failed",
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMError("Failed to generate response from LLM.") from e
+            raise ChatServiceError("Failed to generate response from LLM.") from e
         
 
 

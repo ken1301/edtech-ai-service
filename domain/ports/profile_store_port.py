@@ -1,26 +1,41 @@
 from abc import ABC, abstractmethod
-from typing import Optional
 
-from domain.models.profile import StudentProfile
+from domain.models.profile import (
+    StudentProfile,
+    TopicMastery,
+    StudentPreference,
+    Subject,
+)
 
 
 class ProfileStorePort(ABC):
-    @abstractmethod
-    async def get_student_profile(self, student_id: str) -> Optional[StudentProfile]:
-        """Lấy hồ sơ chi tiết của học sinh"""
-        pass
+    """
+    Abstract port for student profile storage.
+
+    One concrete adapter implements this port:
+        - MongoProfileAdapter — persistent profile store (MongoDB)
+    """
 
     @abstractmethod
-    async def update_student_preferences(self, student_id: str, data: dict) -> bool:
-        """Cập nhật những tùy chọn của học sinh"""
-        pass
+    async def get_student_profile(self, student_id: str) -> StudentProfile | None:
+        """
+        Return the full student profile for the given ID, or None if not found.
+        """
 
     @abstractmethod
-    async def update_knowledge_map(self, student_id: str, subject: str, topic: str, data: dict) -> bool:
-        """Cập nhật lỗ hổng kiến thức hoặc điểm số sau mỗi buổi học"""
-        pass
+    async def update_student_profile(
+        self,
+        student_id: str,
+        subject: Subject,
+        topic: str,
+        student_preference: StudentPreference,
+        topic_mastery: TopicMastery,
+    ) -> None:
+        """
+        Upsert the student profile with updated preference and topic mastery.
 
-    @abstractmethod
-    async def save_profile(self, profile: StudentProfile) -> bool:
-        """Tạo mới hoặc ghi đè toàn bộ profile"""
-        pass
+        - Merges `topic_mastery` into the knowledge map under
+          `knowledge_map.<subject>.<topic>` without touching other entries.
+        - Overwrites the `preferences` block entirely with the latest values.
+        - Creates the profile document if it does not yet exist.
+        """

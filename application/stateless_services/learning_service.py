@@ -51,7 +51,7 @@ class LearningService:
         
         try:
             # 1. Save the remaining session history to MongoDB for long-term storage and analysis 
-            history = await self._session_manager.redis_get_history(session_id)
+            history = await self._session_manager.redis_get_right(session_id)
             await self._session_manager.mongo_save_messages(
                 student_id=student_id,
                 session_id=session_id,
