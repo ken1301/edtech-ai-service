@@ -1,4 +1,6 @@
 from openai import AsyncOpenAI
+import instructor
+from pydantic import BaseModel
 from typing import List, Optional
 
 from domain.ports.llm_port import LLMPort
@@ -9,21 +11,23 @@ from domain.models.response import LLMResponse, TokenUsage
 class OpenaiAdapter(LLMPort):
     """OpenAI LLM adapter implementation"""
     
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: str, model: str = "gpt-5.4-nano"):
         """Initialize OpenAI adapter
         
         Args:
             api_key: OpenAI API key
             model: Model name (default: gpt-4o-mini for cost efficiency)
         """
-        self.client = AsyncOpenAI(api_key=api_key)
+        self.base_client = AsyncOpenAI(api_key=api_key)
         self.model = model
+        self.client = instructor.from_openai(self.base_client)
 
     async def generate_response(
             self,
             system_prompt: str,
             messages: List[Message],
-            context: Optional[ConversationContext] = None
+            context: Optional[ConversationContext] = None,
+            response_model: Optional[BaseModel] = None
     ) -> LLMResponse:
         """Generate a response using OpenAI API
         
@@ -31,7 +35,7 @@ class OpenaiAdapter(LLMPort):
             system_prompt: System instruction for the model
             messages: List of conversation messages
             context: Optional context with temperature and max tokens
-            
+            response_model: Optional response model
         Returns:
             LLMResponse with content and token usage
         """
@@ -40,24 +44,28 @@ class OpenaiAdapter(LLMPort):
         for m in messages:
             formatted_messages.append({"role": m.role.value, "content": m.content})
 
+        temperature = context.temperature if context else 0.3
         max_tokens = context.max_completion_tokens if context else None
+        response_format = context.response_format if context else "text"
 
         api_params = {
             "model": self.model,
             "messages": formatted_messages,
-            "max_tokens": max_tokens,
+            "max_completion_tokens": max_tokens,
+            "response_format": response_format,
+            "temperature": temperature
         }
 
-        response = await self.client.chat.completions.create(**api_params)
+        response, completion = await self.client.chat.completions.create_with_completion(**api_params)
 
         return LLMResponse(
-            content=response.choices[0].message.content,
-            model_name=self.model,
-            finish_reason=response.choices[0].finish_reason,
+            content=response,
+            model_name=completion.model,
+            finish_reason=completion.choices[0].finish_reason,
             usage=TokenUsage(
-                prompt_tokens=response.usage.prompt_tokens,
-                completion_tokens=response.usage.completion_tokens,
-                total_tokens=response.usage.total_tokens
+                prompt_tokens=completion.usage.prompt_tokens,
+                completion_tokens=completion.usage.completion_tokens,
+                total_tokens=completion.usage.total_tokens
             )
         )
 
@@ -66,8 +74,5 @@ class OpenaiAdapter(LLMPort):
             messages: List[Message],
             context: Optional[ConversationContext] = None
     ):
-        """Generate a streaming response from OpenAI
-        
-        TODO: Implement streaming response support
-        """
+        """Generate a streaming response from OpenAI"""
         raise NotImplementedError("Streaming support coming soon")

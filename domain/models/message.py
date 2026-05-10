@@ -21,5 +21,4 @@ class Message(BaseModel):
 class ConversationContext(BaseModel):
     temperature: float = 0.3
     max_completion_tokens: Optional[int] = None
-    response_format: str = "text"
     stream: bool = False

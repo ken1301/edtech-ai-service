@@ -2,30 +2,37 @@ import logging
 import structlog
 from logging.handlers import RotatingFileHandler
 
-from infrastructure.observability.middleware import correlation_id_ctx
 
-
-def _inject_correlation_id(logger, method, event_dict):
-    event_dict["correlation_id"] = correlation_id_ctx.get()
-    return event_dict
-
-
-def setup_logging():
+def setup_logging(log_level: str = "INFO", log_file: str = "app.log"):
+    
+    # --- Standard library logging (nơi structlog ghi vào) ---
     file_handler = RotatingFileHandler(
-        "app.log", maxBytes=10*1024*1024, backupCount=5, encoding="utf-8"
+        log_file, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
     )
+    file_handler.setFormatter(logging.Formatter("%(message)s"))  # structlog đã format rồi
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter("%(message)s"))
 
     logging.basicConfig(
-        handlers=[file_handler, logging.StreamHandler()], # Ghi cả vào file và console
-        level=logging.INFO
+        handlers=[file_handler, console_handler],
+        level=getattr(logging, log_level.upper(), logging.INFO),
+        force=True,
     )
-    
+
+    # --- Shared processors cho cả dev lẫn prod ---
+    shared_processors = [
+        structlog.contextvars.merge_contextvars,        # tự inject correlation_id và mọi thứ đã bind
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,               # biết log từ file nào
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),       # render stack trace
+        structlog.processors.ExceptionRenderer(),       # render exception vào JSON
+    ]
+
     structlog.configure(
-        processors=[
-            structlog.stdlib.add_log_level,
-            structlog.processors.TimeStamper(fmt="iso"),
-            _inject_correlation_id,
-            structlog.processors.JSONRenderer(),
+        processors=shared_processors + [
+            structlog.processors.JSONRenderer(),        # output JSON cho prod
         ],
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),

@@ -48,14 +48,13 @@ class ChatbotUseCase:
 
 
     @staticmethod
-    async def _if_valid_data(self, student_id: str, session_id: str) -> Tuple[Dict[str, Any], bool]:
+    async def _if_valid_data(student_id: str, metadata: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
         # Placeholder for actual validation logic (e.g., check if user exists, session is active, etc.)
-        metadata, is_active = await self._session_manager.redis_get_session(session_id)
         if not metadata: 
             raise AuthorizationError("Session not found.")
         if metadata.get("student_id") != student_id:
             raise AuthorizationError("User not authorized for this session.")
-        return metadata, is_active
+        return metadata
     
 
     async def run(
@@ -72,9 +71,11 @@ class ChatbotUseCase:
         
         try:
             # 1. Look for session metadata & 2. Validate session and user data
-            metadata, is_active = await self._if_valid_data(student_id, session_id)
+            metadata = await self._session_manager.redis_get_metadata(session_id)
+            await self._if_valid_data(metadata, student_id)
 
             # 3. Check if the session is active
+            is_active = metadata["is_active"]
             if not is_active:
                 background_task.add_task(
                     self._learning_service.sync_and_close_session,
@@ -172,7 +173,7 @@ class ChatbotUseCase:
             )
 
             logger.info(
-                "chatbot.response_generated.completed",
+                "chatbot.processing.completed",
                 session_id=session_id,
                 log_type="business",
                 model_name=llm_response.model_name,

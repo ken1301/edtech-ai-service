@@ -1,76 +1,177 @@
-import time
-from typing import List, Tuple
-
 from domain.ports.session_store_port import SessionStorePort
-from domain.models.message import Message, Role
-from domain.exceptions import SessionExpiredError
-from infrastructure.logging import logger
 
+from domain.models.message import Message
+from domain.models.profile import Subject
+
+from infrastructure.logging import logger   
+
+from domain.exceptions import SessionManagerError
 
 class SessionManager:
-    """Manages chat session lifecycle and context compression."""
+    """Service responsible for managing session state, including syncing session data to the database and closing sessions."""
 
-    SESSION_TIMEOUT_SECONDS = 60 * 60 * 0.1  # 1 hour
-    COMPRESSION_THRESHOLD = 10      # compress when turn count exceeds this
-    MESSAGES_TO_COMPRESS = 10       # summarise the oldest N messages
-    MESSAGES_TO_KEEP = 10           # keep the most recent N messages verbatim
-
-    def __init__(self, session_store: SessionStorePort):
-        self.session_store = session_store
-
-    async def get_or_create_session(self, session_id: str) -> Tuple[dict, bool]:
-        """Return (metadata, is_active). Creates a new session if none exists."""
-        meta = await self.session_store.get_metadata(session_id)
-
-        if not meta:
-            meta = {"start_time": time.time(), "is_active": True, "turn_count": 0}
-            await self.session_store.save_metadata(session_id, meta)
-            logger.info("SESSION_CREATED", session_id=session_id)
-            return meta, True
-
-        if time.time() - meta.get("start_time", 0) > self.SESSION_TIMEOUT_SECONDS:
-            meta["is_active"] = False
-            await self.session_store.save_metadata(session_id, meta)
-            logger.warning("SESSION_EXPIRED", session_id=session_id)
-            return meta, False
-
-        logger.info("SESSION_RETRIEVED", session_id=session_id)
-        return meta, True
-
-    async def increment_turn(self, session_id: str, meta: dict) -> dict:
-        """Increment turn counter and persist metadata."""
-        meta["turn_count"] = meta.get("turn_count", 0) + 1
-        await self.session_store.save_metadata(session_id, meta)
-        return meta
-
-    async def save_metadata(self, session_id: str, metadata: dict) -> bool:
-        return await self.session_store.save_metadata(session_id, metadata)
-
-    def needs_compression(self, meta: dict) -> bool:
-        return meta.get("turn_count", 0) > self.COMPRESSION_THRESHOLD
-
-    async def get_messages_for_compression(self, session_id: str) -> Tuple[List[Message], List[Message]]:
-        """Split history into (old_messages_to_compress, recent_messages_to_keep)."""
-        history = await self.session_store.get_history(session_id)
-        if len(history) <= self.MESSAGES_TO_KEEP:
-            return [], history
-        split = len(history) - self.MESSAGES_TO_KEEP
-        return history[:split], history[split:]
-
-    async def replace_history_with_summary(
+    def __init__(
         self,
+        redis_session_store: SessionStorePort,
+        mongo_session_store: SessionStorePort
+    ):
+        self._redis_store = redis_session_store
+        self._mongo_store = mongo_session_store
+
+    # ================= Redis operations =================
+
+    async def redis_get_metadata(self, session_id: str) -> dict:
+        """Get session metadata from Redis."""
+        try: 
+            metadata = await self._redis_store.get_metadata(session_id)
+            return metadata
+        
+        except Exception as e:
+            logger.error(
+                "session_manager.redis_get_metadata.failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+            )
+            raise SessionManagerError("Failed to get session metadata from Redis.") from e
+        
+
+    async def redis_save_metadata(self, session_id: str, metadata: dict):
+        """Save session metadata to Redis."""
+        try: 
+            await self._redis_store.save_metadata(session_id, metadata)
+        
+        except Exception as e:
+            logger.error(
+                "session_manager.redis_save_metadata.failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+            )
+            raise SessionManagerError("Failed to save session metadata to Redis.") from e
+        
+
+    async def redis_get_right(self, session_id: str, limit: int) -> list[Message]:
+        """Get the most recent messages from Redis for the session."""
+        try: 
+            messages = await self._redis_store.get_right(session_id, limit)
+            return messages
+        
+        except Exception as e:
+            logger.error(
+                "session_manager.redis_get_right.failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+            )
+            raise SessionManagerError("Failed to get messages from Redis.") from e
+        
+
+    async def redis_save_turn(
+        self, 
+        session_id: str, 
+        user_message: Message, 
+        assistant_message: Message
+    ):
+        """Save a turn (user message + assistant message) to Redis."""
+        try: 
+            await self._redis_store.save_turn(session_id, user_message, assistant_message)
+        
+        except Exception as e:
+            logger.error(
+                "session_manager.redis_save_turn.failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+            )
+            raise SessionManagerError("Failed to save message turn to Redis.") from e
+    
+    
+    async def redis_get_left(self, session_id: str, limit: int) -> list[Message]:
+        """Get the oldest messages from Redis for the session (used for history compression)."""
+        try: 
+            messages = await self._redis_store.get_left(session_id, limit)
+            return messages
+        
+        except Exception as e:
+            logger.error(
+                "session_manager.redis_get_left.failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+            )
+            raise SessionManagerError("Failed to get messages from Redis.") from e
+        
+    async def redis_delete_left(self, session_id: str, limit: int):
+        """Delete the oldest messages from Redis for the session (used for history compression)."""
+        try: 
+            await self._redis_store.delete_left(session_id, limit)
+        
+        except Exception as e:
+            logger.error(
+                "session_manager.redis_delete_left.failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+            )
+            raise SessionManagerError("Failed to delete messages from Redis.") from e
+        
+    async def redis_delete_session(self, session_id: str):
+        """Delete all session data from Redis (used when closing a session)."""
+        try: 
+            await self._redis_store.delete_session(session_id)
+        
+        except Exception as e:
+            logger.error(
+                "session_manager.redis_delete_session.failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+            )
+            raise SessionManagerError("Failed to delete session from Redis.") from e
+        
+    # ================= MongoDB operations =================
+    async def mongo_save_messages(
+        self,
+        student_id: str,
         session_id: str,
-        summary_text: str,
-        recent_messages: List[Message],
-    ) -> None:
-        """Clear session history and rebuild with summary + recent messages."""
-        await self.session_store.clear_session(session_id)
+        messages: list[Message],
+        subject: Subject,
+        topic: str,
+    ):
+        """Save the messages when compressing session history"""
 
-        # Re-insert summary as a system message placeholder
-        summary_msg = Message(role=Role.SYSTEM, content=f"[Tóm tắt những tin nhắn trước]: {summary_text}")
-        await self.session_store.save_message(session_id, summary_msg)
+        try:
+            await self._mongo_store.save_messages(
+                student_id=student_id,
+                session_id=session_id,
+                messages=messages,
+                subject=subject,
+                topic=topic,
+            )
 
-        for msg in recent_messages:
-            await self.session_store.save_message(session_id, msg)
+        except Exception as e:
+            logger.error(
+                "session_manager.mongo_save_messages.failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+            )
+            raise SessionManagerError("Failed to save messages to MongoDB.") from e
+        
+    async def mongo_get_history_messages(self, session_id: str) -> list[Message]:
+        """Get all session messages from MongoDB (used for session summarization when closing session)"""
 
-        logger.info("CONTEXT_COMPRESSED", session_id=session_id, kept=len(recent_messages))
+        try:
+            messages = await self._mongo_store.get_history_messages(session_id)
+            return messages
+
+        except Exception as e:
+            logger.error(
+                "session_manager.mongo_get_history_messages.failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+            )
+            raise SessionManagerError("Failed to get session messages from MongoDB.") from e
+        
