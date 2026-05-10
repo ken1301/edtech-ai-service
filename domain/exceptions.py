@@ -22,5 +22,14 @@ class PromptGenerationError(Exception):
     """Raised when prompt generation fails."""
     pass
 
+class SessionManagerError(Exception):
+    """Raised when there is an error in session management."""
+    pass
+
+class ProfileManagerError(Exception):
+    """Raised when there is an error in fetching student profile."""
+    pass
+
+
 
 
