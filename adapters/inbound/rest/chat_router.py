@@ -23,7 +23,6 @@ async def chat(
         )
 
     try:
-        print(f"Received chat request: {request}")
         response = await chatbot_manager.run(
             student_id=request.user_id,
             session_id=request.session_id,

@@ -24,9 +24,17 @@ class SessionManager:
         """Get session metadata from Redis."""
         try: 
             metadata = await self._redis_store.get_metadata(session_id)
+            
+            logger.info(
+                "session_manager.redis_get_metadata.completed",
+                log_type="business",
+                session_id=session_id,
+            )
+
             return metadata
         
-        except SessionStoreError as e:
+
+        except SessionStoreError as e: 
             logger.error(
                 "session_manager.redis_get_metadata.failed",
                 log_type="technical",
@@ -49,7 +57,13 @@ class SessionManager:
         """Save session metadata to Redis."""
         try: 
             await self._redis_store.save_metadata(session_id, metadata)
-        
+
+            logger.info(
+                "session_manager.redis_save_metadata.completed",
+                log_type="business",
+                session_id=session_id,
+            )        
+            
         except SessionStoreError as e:
             logger.error(
                 "session_manager.redis_save_metadata.failed",
@@ -72,6 +86,13 @@ class SessionManager:
         """Get the most recent messages from Redis for the session."""
         try: 
             messages = await self._redis_store.get_right(session_id, limit)
+            
+            logger.info(
+                "session_manager.redis_get_right.completed",
+                log_type="business",
+                session_id=session_id,
+            )
+            
             return messages
         
         except SessionStoreError as e:
@@ -102,6 +123,12 @@ class SessionManager:
         """Save a turn (user message + assistant message) to Redis."""
         try: 
             await self._redis_store.save_turn(session_id, user_message, assistant_message)
+
+            logger.info(
+                "session_manager.redis_save_turn.completed",
+                log_type="business",
+                session_id=session_id,
+            )
         
         except SessionStoreError as e:
             logger.error(
@@ -126,6 +153,13 @@ class SessionManager:
         """Get the oldest messages from Redis for the session (used for history compression)."""
         try: 
             messages = await self._redis_store.get_left(session_id, limit)
+            
+            logger.info(
+                "session_manager.redis_get_left.completed",
+                log_type="business",   
+                session_id=session_id,
+            )
+            
             return messages
         
         except SessionStoreError as e:
@@ -149,6 +183,12 @@ class SessionManager:
         """Delete the oldest messages from Redis for the session (used for history compression)."""
         try: 
             await self._redis_store.delete_left(session_id, limit)
+
+            logger.info(
+                "session_manager.redis_delete_left.completed",
+                log_type="business",
+                session_id=session_id,
+            )
         
         except SessionStoreError as e:
             logger.error(
@@ -172,6 +212,12 @@ class SessionManager:
         """Delete all session data from Redis (used when closing a session)."""
         try: 
             await self._redis_store.delete_session(session_id)
+        
+            logger.info(
+                "session_manager.redis_delete_session.completed",
+                log_type="business",
+                session_id=session_id,
+            )
         
         except SessionStoreError as e:
             logger.error(
@@ -211,6 +257,12 @@ class SessionManager:
                 topic=topic,
             )
 
+            logger.info(
+                "session_manager.mongo_save_messages.completed",
+                log_type="business",
+                session_id=session_id,
+            )
+
         except SessionStoreError as e:
             logger.error(
                 "session_manager.mongo_save_messages.failed",
@@ -234,6 +286,13 @@ class SessionManager:
 
         try:
             messages = await self._mongo_store.get_history_messages(session_id)
+
+            logger.info(
+                "session_manager.mongo_get_history_messages.completed",
+                log_type="business",
+                session_id=session_id,
+            )
+
             return messages
 
         except SessionStoreError as e:

@@ -55,7 +55,7 @@ class ChatbotUseCase:
         # Placeholder for actual validation logic (e.g., check if user exists, session is active, etc.)
         if not metadata: 
             raise AuthorizationError("Session not found.")
-        if metadata.get("student_id") != student_id:
+        if metadata.get("user_id") != student_id:
             raise AuthorizationError("User not authorized for this session.")
         return metadata
     

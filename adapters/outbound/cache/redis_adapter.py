@@ -151,6 +151,17 @@ class RedisSessionAdapter(SessionStorePort):
 
         return metadata, False
 
+    @staticmethod
+    def _ensure_metadata_defaults(metadata: dict) -> tuple[dict, bool]:
+        """Backfill missing metadata fields for older Redis session records."""
+        needs_persist = False
+
+        if "turn_count" not in metadata:
+            metadata["turn_count"] = 0
+            needs_persist = True
+
+        return metadata, needs_persist
+
     # ── SessionStorePort interface ────────────────────────────────────────────
 
     async def get_metadata(self, session_id: str) -> dict:
@@ -195,7 +206,9 @@ class RedisSessionAdapter(SessionStorePort):
                 f"Corrupt metadata JSON for session '{session_id}'."
             ) from e
 
-        metadata, needs_persist = self._check_session_timeout(session_id, metadata)
+        metadata, needs_default_persist = self._ensure_metadata_defaults(metadata)
+        metadata, needs_timeout_persist = self._check_session_timeout(session_id, metadata)
+        needs_persist = needs_default_persist or needs_timeout_persist
 
         if needs_persist:
             try:

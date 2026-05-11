@@ -16,6 +16,6 @@ def llm_factory(
         return GroqAdapter(api_key=api_key, model=model_name or "llama-3.1-8b-instant")
 
     if provider == "openai":
-        return OpenaiAdapter(api_key=api_key, model=model_name or "gpt-4o-mini")
+        return OpenaiAdapter(api_key=api_key, model=model_name or "gpt-5.4-nano")
 
     raise ValueError(f"Unsupported LLM provider: {provider}")

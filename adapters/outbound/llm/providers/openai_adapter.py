@@ -1,6 +1,7 @@
 import openai
 from openai import AsyncOpenAI
 import instructor
+from instructor.exceptions import IncompleteOutputException, InstructorError, InstructorRetryException
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -13,111 +14,228 @@ from infrastructure.logging import logger
 
 
 class OpenaiAdapter(LLMPort):
-    """OpenAI LLM adapter implementation"""
-    
+    """
+    OpenAI LLM adapter.
+
+    Routing strategy
+    ────────────────
+    • response_model is None  → plain AsyncOpenAI client
+      Returns a normal ChatCompletion; content is response.choices[0].message.content.
+
+    • response_model provided → instructor-patched client
+      Returns a (parsed_model, raw_completion) tuple via create_with_completion.
+      instructor handles schema injection, validation, and its own retry loop.
+      If instructor exhausts its retries, InstructorRetryException bubbles up here.
+
+    Keeping two separate clients avoids running every plain-text request through
+    instructor's validation pipeline, which adds latency and non-deterministic
+    retry behaviour when structured output is not needed.
+    """
+
     def __init__(self, api_key: str, model: str = "gpt-5.4-nano"):
-        """Initialize OpenAI adapter
-        
-        Args:
-            api_key: OpenAI API key
-            model: Model name (default: gpt-4o-mini for cost efficiency)
-        """
-        self.base_client = AsyncOpenAI(api_key=api_key)
-        self.model = model
-        self.client = instructor.from_openai(self.base_client)
+        self._base_client       = AsyncOpenAI(api_key=api_key)
+        self._instructor_client = instructor.from_openai(self._base_client)
+        self.model              = model
 
     async def generate_response(
-            self,
-            system_prompt: str,
-            messages: List[Message],
-            context: Optional[ConversationContext] = None,
-            response_model: Optional[BaseModel] = None
+        self,
+        system_prompt: str,
+        messages: List[Message],
+        context: Optional[ConversationContext] = None,
+        response_model: Optional[BaseModel] = None,
     ) -> LLMResponse:
-        """Generate a response using OpenAI API
-        
-        Args:
-            system_prompt: System instruction for the model
-            messages: List of conversation messages
-            context: Optional context with temperature and max tokens
-            response_model: Optional response model
-        Returns:
-            LLMResponse with content and token usage
-        """
 
+        formatted_messages = [{"role": "system", "content": system_prompt}]
+        for m in messages:
+            formatted_messages.append({"role": m.role.value, "content": m.content})
+
+        temperature = context.temperature if context else 0.3
+        max_tokens  = context.max_completion_tokens if context else None
+
+        api_params = {
+            "model":                self.model,
+            "messages":             formatted_messages,
+            "temperature":          temperature,
+            "max_completion_tokens": max_tokens,
+        }
+
+        if response_model is not None:
+            return await self._generate_structured(api_params, response_model)
+        return await self._generate_plain(api_params)
+
+    # ── private helpers ───────────────────────────────────────────────────────
+
+    async def _generate_plain(self, api_params: dict) -> LLMResponse:
+        """Plain-text completion via the base AsyncOpenAI client."""
         try:
-            formatted_messages = [{"role": "system", "content": system_prompt}]
-
-            for m in messages:
-                formatted_messages.append({"role": m.role.value, "content": m.content})
-
-            temperature = context.temperature if context else 0.3
-            max_tokens = context.max_completion_tokens if context else None
-
-            api_params = {
-                "model": self.model,
-                "messages": formatted_messages,
-                "max_completion_tokens": max_tokens,
-                "response_model": response_model,
-                "temperature": temperature
-            }
-
-            response, completion = await self.client.chat.completions.create_with_completion(**api_params)
+            completion = await self._base_client.chat.completions.create(**api_params)
 
             return LLMResponse(
-                content=response,
-                model_name=completion.model,
+                content=completion.choices[0].message.content,
+                model_name=self.model,
                 finish_reason=completion.choices[0].finish_reason,
                 usage=TokenUsage(
                     prompt_tokens=completion.usage.prompt_tokens,
                     completion_tokens=completion.usage.completion_tokens,
-                    total_tokens=completion.usage.total_tokens
-                )
+                    total_tokens=completion.usage.total_tokens,
+                ),
             )
-        
+
         except openai.RateLimitError as e:
             logger.warning(
-                "openai_adapter.rate_limit",
+                "openai_adapter.plain.rate_limit",
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMError("OpenAI API rate limit exceeded. Please try again later.") from e
-        
+            raise LLMError("OpenAI rate limit exceeded. Please try again later.") from e
+
         except openai.AuthenticationError as e:
             logger.error(
-                "openai_adapter.authentication_failed",
+                "openai_adapter.plain.authentication_failed",
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMError("OpenAI API authentication failed. Check your API key.") from e
-        
-        except openai.BadRequestError as e: 
+            raise LLMError("OpenAI authentication failed. Check your API key.") from e
+
+        except openai.BadRequestError as e:
             logger.error(
-                "openai_adapter.bad_request",
+                "openai_adapter.plain.bad_request",
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMError("OpenAI API bad request. Check your input parameters.") from e
-        
+            raise LLMError("OpenAI bad request. Check your input parameters.") from e
+
         except openai.OpenAIError as e:
             logger.error(
-                "openai_adapter.api_error",
+                "openai_adapter.plain.api_error",
                 log_type="technical",
                 error=str(e),
             )
             raise LLMError("OpenAI API error occurred. Please try again later.") from e
-        
+
         except Exception as e:
             logger.error(
-                "openai_adapter.unknown_error",
+                "openai_adapter.plain.unknown_error",
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMError("An unknown error occurred while calling OpenAI API.") from e
+            raise LLMError("An unexpected error occurred while calling OpenAI API.") from e
+
+    async def _generate_structured(
+        self,
+        api_params: dict,
+        response_model: type[BaseModel],
+    ) -> LLMResponse:
+        """
+        Structured completion via the instructor-patched client.
+
+        Exception hierarchy (most specific → most general):
+            InstructorRetryException  ← instructor exhausted all retries
+            IncompleteOutputException ← model hit token limit mid-schema
+            InstructorError           ← base class, other instructor failures
+        """
+        try:
+            parsed, completion = await self._instructor_client.chat.completions.create_with_completion(
+                **api_params,
+                response_model=response_model,
+            )
+
+            return LLMResponse(
+                content=parsed,
+                model_name=self.model,
+                finish_reason=completion.choices[0].finish_reason,
+                usage=TokenUsage(
+                    prompt_tokens=completion.usage.prompt_tokens,
+                    completion_tokens=completion.usage.completion_tokens,
+                    total_tokens=completion.usage.total_tokens,
+                ),
+            )
+
+        # ── instructor-specific exceptions (most specific first) ──────────────
+
+        except InstructorRetryException as e:
+            # All of instructor's internal retries have been exhausted.
+            # This is a hard failure, not a transient warning.
+            logger.error(
+                "openai_adapter.structured.instructor_retry_exhausted",
+                log_type="technical",
+                response_model=response_model.__name__,
+                attempts=e.n_attempts if hasattr(e, "n_attempts") else "unknown",
+                last_error=str(e),
+            )
+            raise LLMError(
+                "Instructor failed to produce a valid structured response after all retries."
+            ) from e
+
+        except IncompleteOutputException as e:
+            # Model stopped generating before completing the JSON schema —
+            # usually a max_tokens issue.
+            logger.warning(
+                "openai_adapter.structured.incomplete_output",
+                log_type="technical",
+                response_model=response_model.__name__,
+                error=str(e),
+            )
+            raise LLMError(
+                "Model output was cut off before the structured response was complete. "
+                "Consider increasing max_completion_tokens."
+            ) from e
+
+        except InstructorError as e:
+            # Catch-all for other instructor failures (schema injection, etc.)
+            logger.error(
+                "openai_adapter.structured.instructor_error",
+                log_type="technical",
+                response_model=response_model.__name__,
+                error=str(e),
+            )
+            raise LLMError("Instructor encountered an error processing the structured request.") from e
+
+        # ── OpenAI API exceptions ─────────────────────────────────────────────
+
+        except openai.RateLimitError as e:
+            logger.warning(
+                "openai_adapter.structured.rate_limit",
+                log_type="technical",
+                error=str(e),
+            )
+            raise LLMError("OpenAI rate limit exceeded. Please try again later.") from e
+
+        except openai.AuthenticationError as e:
+            logger.error(
+                "openai_adapter.structured.authentication_failed",
+                log_type="technical",
+                error=str(e),
+            )
+            raise LLMError("OpenAI authentication failed. Check your API key.") from e
+
+        except openai.BadRequestError as e:
+            logger.error(
+                "openai_adapter.structured.bad_request",
+                log_type="technical",
+                error=str(e),
+            )
+            raise LLMError("OpenAI bad request. Check your input parameters.") from e
+
+        except openai.OpenAIError as e:
+            logger.error(
+                "openai_adapter.structured.api_error",
+                log_type="technical",
+                error=str(e),
+            )
+            raise LLMError("OpenAI API error occurred. Please try again later.") from e
+
+        except Exception as e:
+            logger.error(
+                "openai_adapter.structured.unknown_error",
+                log_type="technical",
+                error=str(e),
+            )
+            raise LLMError("An unexpected error occurred while calling OpenAI API.") from e
 
     async def generate_stream(
-            self,
-            messages: List[Message],
-            context: Optional[ConversationContext] = None
+        self,
+        messages: List[Message],
+        context: Optional[ConversationContext] = None,
     ):
-        """Generate a streaming response from OpenAI"""
-        raise NotImplementedError("Streaming support coming soon")
+        raise NotImplementedError("Streaming support coming soon.")

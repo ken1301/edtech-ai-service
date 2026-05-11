@@ -48,9 +48,9 @@ class Container(containers.DeclarativeContainer):
 
     llm_adapter = providers.Singleton(
         llm_factory,
-        provider="groq",
-        model_name="llama-3.3-70b-versatile",
-        api_key=config.provided.GROQ_API_KEY,
+        provider="openai",
+        model_name="gpt-5.4-nano",
+        api_key=config.provided.OPENAI_API_KEY,
     )
 
     cache_adapter = providers.Singleton(

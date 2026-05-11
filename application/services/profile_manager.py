@@ -32,6 +32,12 @@ class ProfileManager:
                 student_preference=student_preference,
                 topic_mastery=topic_mastery
             )
+            
+            logger.info(
+                "profile_manager.update_student_profile.completed",
+                log_type="business",
+                student_id=student_id,
+            )
         
         except ProfileStoreError as e:
             logger.error(
