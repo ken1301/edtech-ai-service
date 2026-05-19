@@ -1,42 +1,63 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 from datetime import datetime, timezone
-from enum import Enum
 
-class Subject(str, Enum):
-    MATH = "math"
-    IT = "it"
+from domain.models.curriculum import Subject, Topic, Concept
+from domain.models.standard import (
+    ConceptType,
+    BloomLevel,
+    ProblemRole,
+    ApproachStrength,
+    ApproachWeakness,
+    DifficultyLevel,
+    CognitiveOperation,
+    Representation,
+    StudentStrength,
+    StudentWeakness
+)
+from domain.models.exercise import Pattern
 
-# 1. Chi tiết năng lực theo từng chủ đề (Ví dụ: Toán -> Đạo hàm)
-class TopicMastery(BaseModel):
-    score: float = 0.0  # Từ 0.0 đến 1.0
-    last_practiced: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    misconceptions: List[str] = []  # Các lỗ hổng kiến thức AI phát hiện được
-    summary: str  # Tóm tắt ngắn gọn về năng lực của học sinh trong chủ đề này
+class StudentPattern(BaseModel):
+    cognitive_operation: List[CognitiveOperation] = []
+    representation: List[Representation] = []
 
-class StudentPreference(BaseModel):
-    strengths: List[str] = []  # Điểm mạnh của học sinh
-    weaknesses: List[str] = []  # Điểm yếu của học sinh
-    learning_style: Optional[str] = None  # Ví dụ: "visual", "auditory", "kinesthetic"
-    preferred_difficulty: Optional[str] = None  # Ví dụ: "easy", "medium", "hard"
-    other_preferences: Dict[str, Any] = Field(default_factory=dict)  # Các sở thích khác (ví dụ: thời gian học, loại bài tập yêu thích, v.v.)
+class Perfermance(BaseModel):
+    score: float
+    bloom_level: BloomLevel
+    strengths: List[ApproachStrength]
+    weaknesses: List[ApproachWeakness]
+    pattern: StudentPattern 
+    # Pattern mà học sinh đã áp dụng trong bài tập, nó khác với pattern của bài tập
 
 class SessionSummary(BaseModel):
-    student_preference: StudentPreference
-    topic_mastery: TopicMastery
+    score: float
+    last_practiced: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-# 2. DTO chính cho Student Profile
+    mastered_concept_type: List[ConceptType] = []
+    struggling_concept_type: List[ConceptType] = []
+
+    finished_exercise: Dict[ProblemRole, Perfermance] = {}
+
+class LearningStyle(BaseModel):
+    cognitive_operation: List[CognitiveOperation] = []
+    representation: List[Representation] = []
+
+class StudentPreference(BaseModel):
+    summary: Optional[str] = None
+    strengths: List[StudentStrength] = []  # Điểm mạnh của học sinh
+    weaknesses: List[StudentWeakness] = []  # Điểm yếu của học sinh
+    learning_style: Optional[LearningStyle] = None  # Phong cách học tập
+    preferred_difficulty: Optional[DifficultyLevel] = None  # Mức độ khó ưa thích
+    other_preferences: Dict[str, Any] = Field(default_factory=dict)  # Các sở thích khác (ví dụ: thời gian học, loại bài tập yêu thích, v.v.)
+
 class StudentProfile(BaseModel):
-    student_id: str = Field(..., alias="_id")  # Dùng Student UUID từ NestJS
+    user_id: str = Field(..., alias="_id") 
     full_name: str
     grade: int
 
-    # Cá nhân hóa để AI "biết người biết ta" (điểm mạnh, điểm yếu tổng thế, sở thích học tập, v.v.)
     preferences: StudentPreference = Field(default_factory=StudentPreference)
 
-    # Bản đồ kiến thức 
-    # Ví dụ: {"math": {"derivative": TopicMastery, "integral": TopicMastery}}
-    knowledge_map: Dict[str, Dict[str, TopicMastery]] = {}
+    knowledge_map: Dict[Subject, Dict[Topic, Dict[Concept, SessionSummary]]] = Field(default_factory=dict)
 
     metadata: Dict[str, Any] = Field(default_factory=lambda: {"total_sessions": 0})
     last_active: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

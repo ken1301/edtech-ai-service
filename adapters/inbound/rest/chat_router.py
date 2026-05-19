@@ -9,7 +9,7 @@ from domain.models.response import ChatResponse
 router = APIRouter()
 
 
-@router.post("/", response_model=ChatResponse)
+@router.post("", response_model=ChatResponse)
 @inject
 async def chat(
     request: ChatRequest,
@@ -24,7 +24,7 @@ async def chat(
 
     try:
         response = await chatbot_manager.run(
-            student_id=request.user_id,
+            user_id=request.user_id,
             session_id=request.session_id,
             correlation_id=request.corr_id,
             student_message=request.message,
@@ -34,6 +34,9 @@ async def chat(
         )
 
         return response
+
+    except HTTPException:
+        raise
 
     except Exception as e:
         raise HTTPException(

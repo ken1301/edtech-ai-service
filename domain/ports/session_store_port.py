@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 
 from domain.models.message import Message
-from domain.models.profile import Subject
-
+from domain.models.curriculum import Subject
 
 class SessionStorePort(ABC):
     """
@@ -23,7 +22,7 @@ class SessionStorePort(ABC):
         """
         Return session metadata dict for the given session.
 
-        Side-effect (Redis adapter only): if `opened_at` shows the session has
+        Side-effect (Redis adapter only): if `created_at` shows the session has
         exceeded the configured timeout, `is_active` is flipped to False,
         `closed_at` is stamped, and the change is persisted before returning.
         Returns an empty dict when the session is not found.
@@ -63,7 +62,7 @@ class SessionStorePort(ABC):
     @abstractmethod
     async def save_messages(
         self,
-        student_id: str,
+        user_id: str,
         session_id: str,
         messages: list[Message],
         subject: Subject,

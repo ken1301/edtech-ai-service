@@ -25,13 +25,13 @@ request_errors = Counter(
 tokens_used = Counter(
     'llm_tokens_used_total',
     'Total tokens used in LLM requests',
-    ['user_id', 'model', 'token_type']
+    ['model', 'token_type']
 )
 
 request_cost = Counter(
     'llm_request_cost_total',
     'Total cost of LLM requests in USD',
-    ['user_id', 'model']
+    ['model']
 )
 
 tokens_per_request = Histogram(

@@ -3,7 +3,8 @@ from pathlib import Path
 
 from domain.ports.profile_store_port import ProfileStorePort
 
-from domain.models.profile import Subject, StudentProfile
+from domain.models.curriculum import Subject
+from domain.models.profile import StudentProfile
 
 from domain.exceptions import PromptGenerationError, ProfileStoreError
 
@@ -35,7 +36,7 @@ class PromptBuilder:
     @staticmethod
     def _get_student_context(
         student_profile: StudentProfile,
-        student_id: str,
+        user_id: str,
         subject: Subject,
         topic: str
     ) -> str:
@@ -51,7 +52,7 @@ class PromptBuilder:
                 logger.warning(
                     "prompt_builder.get_student_context.no_profile",
                     log_type="business",
-                    student_id=student_id
+                    user_id=user_id
                 )
 
                 return context
@@ -77,7 +78,7 @@ class PromptBuilder:
             logger.error(
                 "prompt_builder.get_student_context.failed",
                 log_type="technical",
-                student_id=student_id,
+                user_id=user_id,
                 subject=subject.value,
                 topic=topic,
                 error=str(e),
@@ -86,13 +87,13 @@ class PromptBuilder:
 
     async def chatbot_system_prompt(
         self,
-        student_id: str,
+        user_id: str,
         subject: Subject,
         topic: str,
     ) -> str:
         try:
-            student_profile = await self._profile_store.get_student_profile(student_id)
-            system_prompt = self._get_student_context(student_profile, student_id, subject, topic)
+            student_profile = await self._profile_store.get_student_profile(user_id)
+            system_prompt = self._get_student_context(student_profile, user_id, subject, topic)
 
             system_prompt += "\n\n" + self.THINKING_PROMPT + "\n\n" + self.ANSWERING_PROMPT
 
@@ -106,7 +107,7 @@ class PromptBuilder:
             logger.error(
                 "prompt_builder.chatbot_system_prompt.failed",
                 log_type="technical",
-                student_id=student_id,
+                user_id=user_id,
                 subject=subject.value,
                 topic=topic,
                 error=str(e),
@@ -117,7 +118,7 @@ class PromptBuilder:
             logger.error(
                 "prompt_builder.chatbot_system_prompt.unexpected.failed",
                 log_type="technical",
-                student_id=student_id,
+                user_id=user_id,
                 subject=subject.value,
                 topic=topic,
                 error=str(e),

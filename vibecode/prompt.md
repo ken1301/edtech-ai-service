@@ -1,32 +1,27 @@
-Execute this action to add monitoring to the codebase. Base on this general infra:
-
-```txt
-FastAPI/Flask App
-    │
-    ├── structlog ──────────► stdout (JSON logs)
-    │                              │
-    │                         Promtail (đọc log)
-    │                              │
-    │                           Loki (lưu log)
-    │                              │
-    │                         Grafana (xem log)
-    │
-    └── prometheus_client ──► /metrics endpoint
-                                   │
-                              Prometheus (scrape mỗi 15s)
-                                   │
-                              Grafana (xem metrics + alert)
+Tôi muốn tạo ra 1 chatbot 
 ```
-
-Top metrics to monitor:
-1. Request latency
-2. Error rates
-3. Throughput (requests per second)
-4. Resource utilization (CPU, memory)
-5. Token per request
-6. Token per user
-7. Price per request
-8. Price per user 
-That metrics is must have for LLM application. You can add more if you think it's useful.
-Moreover, you can create some diagrams to illustrate how the monitoring system works, and how the data flows from the application to the monitoring tools. You can also provide some examples of how to query the logs and metrics in Grafana to get insights about the application's performance and behavior.
+{
+  name: str,
+  grade: str,
+  preference: {
+    strengths: [],
+    weaknesses: [],
+    learning_style: str,
+    preferred_difficulty: str,
+  },
+  knowledge_map: [
+    <subject>: [
+      <topic>: {
+        score: float,
+        misconceptions: [str],
+        summary: str
+      }
+    ]
+  ],
+  
+  thinking_metric: {}, # tập trung đánh giá sâu vào cách học sinh suy nghĩ, tiếp cận và nhận thức vấn đề
+  skill_metric: {}, # đo lường cách thức học sinh thao tác và thực thi các bước giải quyết vấn đề thực tế
+  result_metric: {}, # đánh giá kết quả cuối cùng của học sinh, bao gồm điểm số bài kiểm tra, tốc độ giải quyết vấn đề, và độ chính xác của câu trả lời
+}
+```
 

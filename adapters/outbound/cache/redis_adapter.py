@@ -7,7 +7,7 @@ from redis.exceptions import RedisError
 
 from domain.ports.session_store_port import SessionStorePort
 from domain.models.message import Message, Role
-from domain.models.profile import Subject
+from domain.models.curriculum import Subject
 from domain.exceptions import SessionStoreError
 
 from infrastructure.logging import logger
@@ -28,16 +28,16 @@ class RedisSessionAdapter(SessionStorePort):
         - LTRIM(N, -1)      → drop the N oldest (left)
 
     Session timeout:
-        `get_metadata` compares the current UTC time against `opened_at` stored
+        `get_metadata` compares the current UTC time against `created_at` stored
         inside the metadata dict. If the gap exceeds SESSION_TIMEOUT_SECONDS
         (default 1 h), `is_active` is flipped to False and `closed_at` is
         stamped. The mutated metadata is immediately persisted back to Redis
         before being returned, so all subsequent workers see the correct state.
 
-        Callers must store `opened_at` (ISO-8601 UTC string) when first creating
+        Callers must store `created_at` (ISO-8601 UTC string) when first creating
         the session metadata, e.g.:
             metadata = {
-                "opened_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
                 "is_active": True,
                 ...
             }
@@ -96,7 +96,7 @@ class RedisSessionAdapter(SessionStorePort):
         """
         Pure logic — no I/O, no exceptions raised.
 
-        Compares now_utc against `opened_at` in metadata.
+        Compares now_utc against `created_at` in metadata.
         If elapsed > SESSION_TIMEOUT_SECONDS and session is still active:
             → flips  is_active  = False
             → stamps closed_at  = now  (once only; stable on retry)
@@ -108,31 +108,31 @@ class RedisSessionAdapter(SessionStorePort):
         if not metadata.get("is_active", True):
             return metadata, False
 
-        opened_at_raw: Optional[str] = metadata.get("opened_at")
-        if not opened_at_raw:
+        created_at_raw: Optional[str] = metadata.get("created_at")
+        if not created_at_raw:
             logger.warning(
-                "redis_session_adapter.timeout_check.missing_opened_at",
+                "redis_session_adapter.timeout_check.missing_created_at",
                 log_type="technical",
                 session_id=session_id,
             )
             return metadata, False
 
         try:
-            opened_at: datetime = datetime.fromisoformat(opened_at_raw)
+            created_at: datetime = datetime.fromisoformat(created_at_raw)
         except ValueError:
             logger.error(
-                "redis_session_adapter.timeout_check.invalid_opened_at",
+                "redis_session_adapter.timeout_check.invalid_created_at",
                 log_type="technical",
                 session_id=session_id,
-                opened_at_raw=opened_at_raw,
+                created_at_raw=created_at_raw,
             )
             return metadata, False
 
-        if opened_at.tzinfo is None:
-            opened_at = opened_at.replace(tzinfo=timezone.utc)
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
 
         now             = datetime.now(timezone.utc)
-        elapsed_seconds = (now - opened_at).total_seconds()
+        elapsed_seconds = (now - created_at).total_seconds()
 
         if elapsed_seconds > self._session_timeout:
             metadata["is_active"] = False
@@ -143,7 +143,7 @@ class RedisSessionAdapter(SessionStorePort):
                 "redis_session_adapter.timeout_check.session_expired",
                 log_type="business",
                 session_id=session_id,
-                opened_at=opened_at_raw,
+                created_at=created_at_raw,
                 closed_at=metadata["closed_at"],
                 elapsed_seconds=round(elapsed_seconds),
             )
@@ -155,6 +155,10 @@ class RedisSessionAdapter(SessionStorePort):
     def _ensure_metadata_defaults(metadata: dict) -> tuple[dict, bool]:
         """Backfill missing metadata fields for older Redis session records."""
         needs_persist = False
+
+        if "created_at" not in metadata and metadata.get("created_at"):
+            metadata["created_at"] = metadata["created_at"]
+            needs_persist = True
 
         if "turn_count" not in metadata:
             metadata["turn_count"] = 0

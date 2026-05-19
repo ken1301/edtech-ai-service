@@ -5,7 +5,7 @@ from pymongo.errors import PyMongoError
 
 from domain.ports.session_store_port import SessionStorePort
 from domain.models.message import Message, Role
-from domain.models.profile import Subject
+from domain.models.curriculum import Subject
 from domain.exceptions import SessionStoreError
 
 from infrastructure.logging import logger
@@ -21,7 +21,7 @@ class MongoSessionAdapter(SessionStorePort):
     {
         "_id": ObjectId,
         "session_id": str,
-        "student_id": str,
+        "user_id": str,
         "subject": str,
         "topic": str,
         "messages": [
@@ -62,7 +62,7 @@ class MongoSessionAdapter(SessionStorePort):
 
     async def save_messages(
         self,
-        student_id: str,
+        user_id: str,
         session_id: str,
         messages: list[Message],
         subject: Subject,
@@ -74,13 +74,13 @@ class MongoSessionAdapter(SessionStorePort):
                 "mongo_session_adapter.save_messages.empty",
                 log_type="technical",
                 session_id=session_id,
-                student_id=student_id,
+                user_id=user_id,
             )
             return
 
         doc = {
             "session_id": session_id,
-            "student_id": student_id,
+            "user_id": user_id,
             "subject":    subject.value,
             "topic":      topic,
             "messages":   [self._serialize_message(m) for m in messages],
@@ -94,7 +94,7 @@ class MongoSessionAdapter(SessionStorePort):
                 "mongo_session_adapter.save_messages.failed",
                 log_type="technical",
                 session_id=session_id,
-                student_id=student_id,
+                user_id=user_id,
                 subject=subject.value,
                 topic=topic,
                 message_count=len(messages),

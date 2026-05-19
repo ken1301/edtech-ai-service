@@ -2,12 +2,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
 from typing import Optional
-
-class Role(str, Enum):
-    SYSTEM = "system"
-    USER = "user"
-    ASSISTANT = "assistant"
-    TOOL = "tool"
+from domain.models.standard import Role
 
 class Message(BaseModel):
     role: Role

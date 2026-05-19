@@ -4,17 +4,17 @@ from datetime import datetime
 
 from typing import List, Dict, Any, Tuple
 
-from domain.models.profile import Subject
+from domain.models.curriculum import Subject
 from domain.models.message import Message, Role
 from domain.models.response import ChatResponse
 
-from application.services.chat_service import ChatService
+from application.services.llm_manager import LLMManager
 from application.services.session_manager import SessionManager
 from application.services.prompt_builder import PromptBuilder
 from application.stateless_services.learning_service import LearningService
 
 from domain.exceptions import (
-    ChatServiceError,
+    LLMManagerError,
     ProfileManagerError,
     SessionManagerError,    
     PromptGenerationError,
@@ -36,13 +36,13 @@ class ChatbotUseCase:
 
     def __init__(
         self, 
-        chat_service: ChatService,
+        llm_manager: LLMManager,
         session_manager: SessionManager,
         prompt_builder: PromptBuilder,
         learning_service: LearningService
     ):  
         # Basic service 
-        self._chat_service = chat_service
+        self._llm_manager = llm_manager
         self._session_manager = session_manager
         self._prompt_builder = prompt_builder
 
@@ -51,18 +51,18 @@ class ChatbotUseCase:
 
 
     @staticmethod
-    def _if_valid_data(student_id: str, metadata: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
+    def _if_valid_data(user_id: str, metadata: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
         # Placeholder for actual validation logic (e.g., check if user exists, session is active, etc.)
         if not metadata: 
             raise AuthorizationError("Session not found.")
-        if metadata.get("user_id") != student_id:
+        if metadata.get("user_id") != user_id:
             raise AuthorizationError("User not authorized for this session.")
         return metadata
     
 
     async def run(
         self,
-        student_id: str,
+        user_id: str,
         session_id: str,
         correlation_id: str,
         student_message: str,
@@ -75,14 +75,14 @@ class ChatbotUseCase:
         try:
             # 1. Look for session metadata & 2. Validate session and user data
             metadata = await self._session_manager.redis_get_metadata(session_id)
-            self._if_valid_data(student_id, metadata)
+            self._if_valid_data(user_id, metadata)
 
             # 3. Check if the session is active
             is_active = metadata["is_active"]
             if not is_active:
                 background_task.add_task(
                     self._learning_service.sync_and_close_session,
-                    student_id=student_id,
+                    user_id=user_id,
                     session_id=session_id,
                     subject=subject,
                     topic=topic,
@@ -100,7 +100,7 @@ class ChatbotUseCase:
             system_prompt = metadata.get("system_prompt") if metadata else None
             if not system_prompt:
                 system_prompt = await self._prompt_builder.chatbot_system_prompt(
-                    student_id=student_id,
+                    user_id=user_id,
                     subject=subject,
                     topic=topic,
                 )
@@ -109,20 +109,6 @@ class ChatbotUseCase:
 
             # 5. Compress history messages
             if metadata.get("turn_count", 0) > self.TURN_THRESHOLD:
-                # msg_to_compress = await self._session_manager.redis_get_left(session_id, limit=self.TURN_TO_COMPRESS * self.MSG_PER_TURN)
-                # compress_prompt = await self._prompt_builder.compress_history_prompt()
-
-                # compress_context = await self._learning_service.compress_context(
-                #     system_prompt=compress_prompt,
-                #     messages=msg_to_compress,
-                # )
-
-                # await self._session_manager.redis_delete_left(session_id, limit=self.TURN_TO_COMPRESS * self.MSG_PER_TURN)
-
-                # metadata["summary"] = metadata.get("summary", "") + "\n" + compress_context
-                # metadata["turn_count"] -= self.TURN_TO_COMPRESS
-                # await self._session_manager.redis_save_metadata(session_id, metadata)
-                
                 metadata = await self._learning_service.compress_session_history(
                     session_id=session_id,
                     metadata=metadata,
@@ -150,7 +136,7 @@ class ChatbotUseCase:
             
             llm_input_messages = history_messages + [student_msg_obj]
 
-            llm_response = await self._chat_service.generate_response(
+            llm_response = await self._llm_manager.generate_response(
                 system_prompt=system_prompt,
                 messages=llm_input_messages,
             )
@@ -208,9 +194,9 @@ class ChatbotUseCase:
                 detail="Prompt generation failed during chatbot response generation.",
             )
         
-        except ChatServiceError as e:
+        except LLMManagerError as e:
             logger.error(
-                "chatbot.chat_service.failed",
+                "chatbot.llm_manager.failed",
                 session_id=session_id,
                 log_type="technical",
                 error=str(e),

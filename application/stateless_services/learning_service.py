@@ -1,18 +1,19 @@
 from typing import Dict, Any, Tuple
 import json
 
-from application.services.chat_service import ChatService
+from application.services.llm_manager import LLMManager
 from application.services.session_manager import SessionManager
 from application.services.prompt_builder import PromptBuilder
 from application.services.profile_manager import ProfileManager
 
-from domain.models.profile import Subject
+from domain.models.curriculum import Subject
 from domain.models.message import ConversationContext
+from domain.models.session import SessionSummary
 
 from infrastructure.logging import logger
 
 from domain.exceptions import (
-    LLMError,
+    LLMAdapterError,
     SyncAndCloseSessionError,
     CompressSessionHistoryError,
     PromptGenerationError
@@ -28,12 +29,12 @@ class LearningService:
 
     def __init__(
         self,
-        chat_service: ChatService,
+        llm_manager: LLMManager,
         session_manager: SessionManager,
         prompt_builder: PromptBuilder,
         profile_manager: ProfileManager
     ):
-        self._chat_service = chat_service
+        self._llm_manager = llm_manager
         self._session_manager = session_manager
         self._prompt_builder = prompt_builder
         self._profile_manager = profile_manager
@@ -41,7 +42,7 @@ class LearningService:
 
     async def sync_and_close_session(
         self,
-        student_id: str,
+        user_id: str,
         session_id: str,
         subject: Subject,
         topic: str,
@@ -53,7 +54,7 @@ class LearningService:
             # 1. Save the remaining session history to MongoDB for long-term storage and analysis 
             history = await self._session_manager.redis_get_right(session_id)
             await self._session_manager.mongo_save_messages(
-                student_id=student_id,
+                user_id=user_id,
                 session_id=session_id,
                 messages=history,
                 subject=subject,
@@ -63,17 +64,18 @@ class LearningService:
             # 2. Generate session summary using LLM  
             system_prompt = await self._prompt_builder.summarize_session_prompt()
             all_messages = await self._session_manager.mongo_get_history_messages(session_id)
-            summary_response = await self._chat_service.generate_response(
+            summary_response = await self._llm_manager.generate_response(
                 system_prompt=system_prompt,
                 messages=all_messages,
-                context=self.conversation_context
+                context=self.conversation_context,
+                response_model=SessionSummary
             )
             
             # 3. Save the student preference and knowledge map to MongoDB
             student_preference = summary_response.content.student_preference
             topic_mastery = summary_response.content.topic_mastery
             await self._profile_manager.update_student_profile(
-                student_id=student_id,
+                user_id=user_id,
                 subject=subject,
                 topic=topic,
                 student_preference=student_preference,
@@ -91,7 +93,7 @@ class LearningService:
                 session_id=session_id,
             )
 
-        except LLMError as e:
+        except LLMAdapterError as e:
             logger.error(
                 "sync_and_close_session.llm.failed",
                 log_type="technical",
@@ -132,7 +134,7 @@ class LearningService:
 
             # 2. Generate compression prompt and call LLM to get compressed summary of those messages
             compress_prompt = await self._prompt_builder.compress_history_prompt()
-            compress_context = await self._chat_service.generate_response(
+            compress_context = await self._llm_manager.generate_response(
                 system_prompt=compress_prompt,
                 messages=msg_to_compress,
                 context=self.conversation_context
@@ -155,7 +157,7 @@ class LearningService:
             return metadata
 
 
-        except LLMError as e:
+        except LLMAdapterError as e:
             logger.error(
                 "compress_history.llm.failed",
                 log_type="technical",

@@ -1,5 +1,6 @@
 from typing import Optional
 from pydantic import BaseModel
+import time
 
 from domain.ports.llm_port import LLMPort
 
@@ -8,9 +9,9 @@ from domain.models.message import Message, ConversationContext
 
 from infrastructure.logging import logger
 
-from domain.exceptions import LLMError, ChatServiceError
+from domain.exceptions import LLMAdapterError, LLMManagerError
 
-class ChatService:
+class LLMManager:
     """Service responsible for handling chat-related operations, such as generating chatbot responses and managing conversation context."""
 
     def __init__(self, llm_port: LLMPort):
@@ -33,29 +34,29 @@ class ChatService:
             )
             
             logger.info(
-                "chat_service.generate_response.completed",
+                "llm_manager.generate_response.completed",
                 log_type="business",
             )
 
             return llm_response
         
-        except LLMError as e:
+        except LLMAdapterError as e:
             logger.error(
-                "chat_service.generate_response.failed",
+                "llm_manager.generate_response.failed",
                 log_type="technical",
                 error=str(e),
             )
-            raise ChatServiceError("Failed to generate chatbot response from LLM.") from e
+            raise LLMManagerError("Failed to generate chatbot response from LLM.") from e
 
-        # some specific exceptions can be caught and re-raised as LLMError for better error handling in the use case layer
+        # some specific exceptions can be caught and re-raised as LLMAdapterError for better error handling in the use case layer
 
         except Exception as e:
             logger.error(
-                "chat_service.generate_response.unexpected.failed",
+                "llm_manager.generate_response.unexpected.failed",
                 log_type="technical",
                 error=str(e),
             )
-            raise ChatServiceError("Failed to generate response from LLM.") from e
+            raise LLMManagerError("Failed to generate response from LLM.") from e
         
 
 

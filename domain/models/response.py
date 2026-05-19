@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 
 class TokenUsage(BaseModel):
     prompt_tokens: int
@@ -8,7 +8,7 @@ class TokenUsage(BaseModel):
     estimated_cost: Optional[float] = None
 
 class LLMResponse(BaseModel):
-    content: str
+    content: Union[str, BaseModel]
     model_name: str
     finish_reason: str
     usage: TokenUsage

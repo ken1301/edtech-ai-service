@@ -1,8 +1,7 @@
 from domain.ports.session_store_port import SessionStorePort
 
 from domain.models.message import Message
-from domain.models.profile import Subject
-
+from domain.models.curriculum import Subject
 from infrastructure.logging import logger   
 
 from domain.exceptions import SessionManagerError, SessionStoreError
@@ -240,7 +239,7 @@ class SessionManager:
     # ================= MongoDB operations =================
     async def mongo_save_messages(
         self,
-        student_id: str,
+        user_id: str,
         session_id: str,
         messages: list[Message],
         subject: Subject,
@@ -250,7 +249,7 @@ class SessionManager:
 
         try:
             await self._mongo_store.save_messages(
-                student_id=student_id,
+                user_id=user_id,
                 session_id=session_id,
                 messages=messages,
                 subject=subject,

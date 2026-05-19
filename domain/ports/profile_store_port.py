@@ -17,7 +17,7 @@ class ProfileStorePort(ABC):
     """
 
     @abstractmethod
-    async def get_student_profile(self, student_id: str) -> StudentProfile | None:
+    async def get_student_profile(self, user_id: str) -> StudentProfile | None:
         """
         Return the full student profile for the given ID, or None if not found.
         """
@@ -25,7 +25,7 @@ class ProfileStorePort(ABC):
     @abstractmethod
     async def update_student_profile(
         self,
-        student_id: str,
+        user_id: str,
         subject: Subject,
         topic: str,
         student_preference: StudentPreference,

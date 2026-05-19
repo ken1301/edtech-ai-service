@@ -71,7 +71,7 @@ except Exception as e:
 
 ## Integration with Chat Service
 
-Here's an example of integrating metrics into the ChatService:
+Here's an example of integrating metrics into the LLMManager:
 
 ```python
 import time
@@ -81,7 +81,7 @@ from domain.ports.llm_port import LLMPort
 
 logger = structlog.get_logger()
 
-class ChatService:
+class LLMManager:
     def __init__(self, llm_port: LLMPort):
         self._llm_port = llm_port
     
@@ -121,7 +121,7 @@ class ChatService:
                 )
             
             logger.info(
-                "chat_service.generate_response.completed",
+                "llm_manager.generate_response.completed",
                 user_id=user_id,
                 model=model,
                 elapsed_seconds=elapsed

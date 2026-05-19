@@ -11,7 +11,7 @@ from adapters.outbound.persistence.mongo_session_store import MongoSessionAdapte
 from application.services.prompt_builder import PromptBuilder
 from application.services.session_manager import SessionManager
 from application.services.profile_manager import ProfileManager
-from application.services.chat_service import ChatService
+from application.services.llm_manager import LLMManager
 from application.stateless_services.learning_service import LearningService
 
 from application.use_cases.chatbot_usecase import ChatbotUseCase
@@ -38,6 +38,7 @@ class Container(containers.DeclarativeContainer):
         username=config.provided.MONGO_USER,
         password=config.provided.MONGO_PASSWORD,
         port=config.provided.MONGO_PORT,
+        authSource="admin",
     )
 
     mongo_database = providers.Singleton(
@@ -85,14 +86,14 @@ class Container(containers.DeclarativeContainer):
         profile_store=profile_store,
     )
 
-    chat_service = providers.Singleton(
-        ChatService,
+    llm_manager = providers.Singleton(
+        LLMManager,
         llm_port=llm_adapter,
     )
 
     learning_service = providers.Singleton(
         LearningService,
-        chat_service=chat_service,
+        llm_manager=llm_manager,
         session_manager=session_manager,
         prompt_builder=prompt_builder,
         profile_manager=profile_manager,
@@ -102,7 +103,7 @@ class Container(containers.DeclarativeContainer):
     # Use Cases
     chatbot_use_case = providers.Singleton(
         ChatbotUseCase,
-        chat_service=chat_service,
+        llm_manager=llm_manager,
         session_manager=session_manager,
         prompt_builder=prompt_builder,
         learning_service=learning_service,

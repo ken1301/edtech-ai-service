@@ -24,7 +24,7 @@ class MongoProfileAdapter(ProfileStorePort):
     Document shape:
     {
         "_id": ObjectId,
-        "student_id": str  (unique index),
+        "user_id": str  (unique index),
         "full_name": str | None,
         "grade": str | None,
         "preferences": {StudentPreference fields},
@@ -47,26 +47,26 @@ class MongoProfileAdapter(ProfileStorePort):
 
     # ── ProfileStorePort interface ────────────────────────────────────────────
 
-    async def get_student_profile(self, student_id: str) -> StudentProfile | None:
+    async def get_student_profile(self, user_id: str) -> StudentProfile | None:
         """Return the student profile document, or None if not found."""
         try:
-            doc = await self._col.find_one({"student_id": student_id})
+            doc = await self._col.find_one({"user_id": user_id})
         except PyMongoError as e:
             logger.error(
                 "mongo_profile_adapter.get_student_profile.failed",
                 log_type="technical",
-                student_id=student_id,
+                user_id=user_id,
                 error=str(e),
             )
             raise ProfileStoreError(
-                f"Failed to fetch profile for student '{student_id}' from MongoDB."
+                f"Failed to fetch profile for user '{user_id}' from MongoDB."
             ) from e
 
         if not doc:
             logger.warning(
                 "mongo_profile_adapter.get_student_profile.not_found",
                 log_type="technical",
-                student_id=student_id,
+                user_id=user_id,
             )
             return None
 
@@ -76,16 +76,16 @@ class MongoProfileAdapter(ProfileStorePort):
             logger.error(
                 "mongo_profile_adapter.get_student_profile.deserialize_failed",
                 log_type="technical",
-                student_id=student_id,
+                user_id=user_id,
                 error=str(e),
             )
             raise ProfileStoreError(
-                f"Corrupt profile document for student '{student_id}'."
+                f"Corrupt profile document for user '{user_id}'."
             ) from e
 
     async def update_student_profile(
         self,
-        student_id: str,
+        user_id: str,
         subject: Subject,
         topic: str,
         student_preference: StudentPreference,
@@ -106,14 +106,14 @@ class MongoProfileAdapter(ProfileStorePort):
                 "updated_at":  now,
             },
             "$setOnInsert": {
-                "student_id": student_id,
+                "user_id": user_id,
                 "created_at": now,
             },
         }
 
         try:
             await self._col.update_one(
-                {"student_id": student_id},
+                {"user_id": user_id},
                 update,
                 upsert=True,
             )
@@ -121,13 +121,13 @@ class MongoProfileAdapter(ProfileStorePort):
             logger.error(
                 "mongo_profile_adapter.update_student_profile.failed",
                 log_type="technical",
-                student_id=student_id,
+                user_id=user_id,
                 subject=subject.value,
                 topic=topic,
                 error=str(e),
             )
             raise ProfileStoreError(
-                f"Failed to update profile for student '{student_id}' in MongoDB."
+                f"Failed to update profile for user '{user_id}' in MongoDB."
             ) from e
 
     # ── helpers ───────────────────────────────────────────────────────────────
@@ -135,7 +135,7 @@ class MongoProfileAdapter(ProfileStorePort):
     @staticmethod
     def _deserialize_profile(doc: dict) -> StudentProfile:
         return StudentProfile(
-            student_id=doc["student_id"],
+            user_id=doc["user_id"],
             full_name=doc.get("full_name"),
             grade=doc.get("grade"),
             preferences=(
