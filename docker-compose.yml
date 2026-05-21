@@ -2,7 +2,7 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16
-    container_name: 'postgres'
+    container_name: 'ai-service-postgres'
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -22,7 +22,7 @@ services:
 
   cache:
     image: 'redis/redis-stack:latest'
-    container_name: 'redis'
+    container_name: 'ai-service-redis'
     restart: always
     volumes:
       - redis_data:/data
@@ -41,7 +41,7 @@ services:
 
   mongodb:
     image: mongo:latest
-    container_name: 'mongodb'
+    container_name: 'ai-service-mongodb'
     restart: always
     volumes:
       - mongo_data:/data/db
@@ -60,7 +60,7 @@ services:
 
   mongo-express:
     image: mongo-express:latest
-    container_name: 'mongo-ui'
+    container_name: 'ai-service-mongo-ui'
     restart: always
     ports:
       - '8081:8081'
@@ -77,7 +77,7 @@ services:
   # Monitoring Stack
   prometheus:
     image: prom/prometheus:latest
-    container_name: prometheus
+    container_name: 'ai-service-prometheus'
     restart: always
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
@@ -92,7 +92,7 @@ services:
 
   loki:
     image: grafana/loki:2.9.8
-    container_name: loki
+    container_name: 'ai-service-loki'
     restart: always
     ports:
       - '3100:3100'
@@ -105,7 +105,7 @@ services:
 
   promtail:
     image: grafana/promtail:latest
-    container_name: promtail
+    container_name: 'ai-service-promtail'
     restart: always
     volumes:
       - /var/log:/var/log
@@ -119,7 +119,7 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    container_name: grafana
+    container_name: 'ai-service-grafana'
     restart: always
     ports:
       - '3000:3000'
@@ -137,6 +137,20 @@ services:
       - prometheus
       - loki
 
+  minio:
+    image: minio/minio:latest
+    container_name: 'ai-service-minio'
+    restart: always
+    ports:
+      - '${MINIO_API_PORT}:9000'
+      - '${MINIO_CONSOLE_PORT}:9001'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+
 networks:
   ai-service-network:
     driver: bridge
@@ -148,4 +162,5 @@ volumes:
   prometheus_data:
   loki_data:
   grafana_data:
+  minio_data:
 

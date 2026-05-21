@@ -25,5 +25,8 @@ redis>=5.0.0
 # Database
 motor>=3.3.0
 
+# Cloud
+boto3>=1.28.0
+
 # Monitoring & Observability
 prometheus-client>=0.19.0

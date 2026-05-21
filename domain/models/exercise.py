@@ -44,7 +44,6 @@ class Problem(BaseModel):
     problem_role: ProblemRole
 
 class Exercise(BaseModel):
-    id: str
     problem_list: List[Problem]
 
     subject: Subject

@@ -6,7 +6,7 @@ from domain.models.exercise import Exercise
 class ExerciseStorePort(ABC):
 
     @abstractmethod
-    async def save_exercise(self, exercise: Exercise) -> bool:
+    async def save_exercise(self, exercise_id: str, author_id: str, exercise: Exercise) -> bool:
         """Lưu một danh sách bài tập vào kho lưu trữ và trả về True nếu thành công, False nếu thất bại."""
         pass
 

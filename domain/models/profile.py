@@ -29,12 +29,12 @@ class Perfermance(BaseModel):
     pattern: StudentPattern 
     # Pattern mà học sinh đã áp dụng trong bài tập, nó khác với pattern của bài tập
 
-class SessionSummary(BaseModel):
-    score: float
+class LearningDetail(BaseModel):
+    avg_score: float
     last_practiced: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    mastered_concept_type: List[ConceptType] = []
-    struggling_concept_type: List[ConceptType] = []
+    mastering_at: List[ConceptType] = []
+    struggling_at: List[ConceptType] = []
 
     finished_exercise: Dict[ProblemRole, Perfermance] = {}
 
@@ -57,10 +57,30 @@ class StudentProfile(BaseModel):
 
     preferences: StudentPreference = Field(default_factory=StudentPreference)
 
-    knowledge_map: Dict[Subject, Dict[Topic, Dict[Concept, SessionSummary]]] = Field(default_factory=dict)
+    knowledge_map: Dict[Subject, Dict[Topic, Dict[Concept, LearningDetail]]] = Field(default_factory=dict)
 
     metadata: Dict[str, Any] = Field(default_factory=lambda: {"total_sessions": 0})
     last_active: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Config:
         populate_by_name = True
+
+
+class SessionSummary(BaseModel):
+    """To summarize chat session history, using this to update student profile"""
+
+    # --- Student preferences ---
+    summary: str
+    strengths: List[StudentStrength]
+    weaknesses: List[StudentWeakness]
+    learning_style: Optional[LearningStyle] = None
+    preferred_difficulty: Optional[DifficultyLevel] = None
+
+    # --- Knowledge map ---
+    mastering_at: List[ConceptType] = []
+    struggling_at: List[ConceptType] = []
+
+    finished_exercise: Dict[ProblemRole, Perfermance] = {}
+
+    
+

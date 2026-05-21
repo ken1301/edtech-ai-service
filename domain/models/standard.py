@@ -56,7 +56,6 @@ class ApproachStrength(Enum):
     EXACT_RESULT        = "exact_result"         # Cho kết quả chính xác, không xấp xỉ
     HANDLES_EDGE_CASES  = "handles_edge_cases"   # Xử lý tốt trường hợp biên
 
-
 class ApproachWeakness(Enum):
     HIGH_TIME_COMPLEXITY    = "high_time_complexity"    # Chậm khi input lớn
     HIGH_SPACE_COMPLEXITY   = "high_space_complexity"   # Tốn bộ nhớ
@@ -71,7 +70,6 @@ class StudentStrength(Enum):
     CAREFUL          = "careful"           # Cẩn thận, ít làm sai sót vặt
     CREATIVE         = "creative"          # Hay tìm ra cách giải độc đáo
     FAST_EXECUTION   = "fast_execution"    # Trình bày hoặc gõ code rất nhanh
-
 
 class StudentWeakness(Enum):
     CARELESS         = "careless"          # Hay ẩu, sót trường hợp dễ/biên

@@ -2,11 +2,14 @@ from dependency_injector import containers, providers
 
 import redis.asyncio as aioredis
 from motor.motor_asyncio import AsyncIOMotorClient
+import boto3
 
 from adapters.outbound.cache.redis_adapter import RedisSessionAdapter
 from adapters.outbound.llm.factory import llm_factory
 from adapters.outbound.persistence.mongo_profile_store import MongoProfileAdapter
 from adapters.outbound.persistence.mongo_session_store import MongoSessionAdapter
+from adapters.outbound.persistence.mongo_exercise_store import MongoExerciseAdapter
+from adapters.outbound.docs_storage.s3_adapter import S3Adapter
 
 from application.services.prompt_builder import PromptBuilder
 from application.services.session_manager import SessionManager
@@ -41,6 +44,15 @@ class Container(containers.DeclarativeContainer):
         authSource="admin",
     )
 
+    s3_client = providers.Singleton(
+        boto3.client,
+        "s3",
+        endpoint_url=config.provided.MINIO_ENDPOINT_URL,
+        aws_access_key_id=config.provided.MINIO_ROOT_USER,
+        aws_secret_access_key=config.provided.MINIO_ROOT_PASSWORD,
+        region_name=config.provided.REGION_NAME,
+    )
+
     mongo_database = providers.Singleton(
         lambda client, db_name: client[db_name],
         client=mongo_client,
@@ -69,7 +81,17 @@ class Container(containers.DeclarativeContainer):
         db=mongo_database,
     )
 
-    # Sevices
+    exercise_store = providers.Singleton(
+        MongoExerciseAdapter,
+        db=mongo_database,
+    )
+
+    s3_adapter = providers.Singleton(
+        S3Adapter,
+        s3_client=s3_client,
+    )
+
+    # Services
     prompt_builder = providers.Singleton(
         PromptBuilder,
         profile_store=profile_store,
@@ -98,7 +120,6 @@ class Container(containers.DeclarativeContainer):
         prompt_builder=prompt_builder,
         profile_manager=profile_manager,
     )
-
 
     # Use Cases
     chatbot_use_case = providers.Singleton(

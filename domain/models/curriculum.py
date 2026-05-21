@@ -186,35 +186,3 @@ class Curriculum:
             raise TypeError(f"Expected Topic, got {type(topic).__name__!r}.")
         return [c for c in Concept if c.topic is topic]
 
-
-# ---------------------------------------------------------------------------
-# Quick demo
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    c = Curriculum()
-
-    # ✅ Valid path
-    print(c.get(Subject.IT, Topic.ALGORITHMS, Concept.SORTING))
-
-    # ✅ List helpers
-    print("IT topics  :", [t.value for t in c.topics_of(Subject.IT)])
-    print("ALGEBRA concepts:", [x.value for x in c.concepts_of(Topic.ALGEBRA)])
-
-    # ❌ Topic not in Subject
-    try:
-        c.get(Subject.MATH, Topic.ALGORITHMS, Concept.SORTING)
-    except ValueError as e:
-        print("ValueError:", e)
-
-    # ❌ Concept not in Topic
-    try:
-        c.get(Subject.IT, Topic.ALGORITHMS, Concept.DERIVATIVES)
-    except ValueError as e:
-        print("ValueError:", e)
-
-    # ❌ Wrong type
-    try:
-        c.get("math", Topic.ALGEBRA, Concept.LINEAR_EQUATIONS)
-    except TypeError as e:
-        print("TypeError:", e)
