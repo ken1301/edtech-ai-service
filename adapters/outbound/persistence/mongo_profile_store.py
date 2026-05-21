@@ -53,7 +53,7 @@ class MongoProfileAdapter(ProfileStorePort):
             doc = await self._col.find_one({"user_id": user_id})
         except PyMongoError as e:
             logger.error(
-                "mongo_profile_adapter.get_student_profile.failed",
+                "mongo_profile_store.get_student_profile.failed",
                 log_type="technical",
                 user_id=user_id,
                 error=str(e),
@@ -61,20 +61,23 @@ class MongoProfileAdapter(ProfileStorePort):
             raise ProfileStoreError(
                 f"Failed to fetch profile for user '{user_id}' from MongoDB."
             ) from e
-
-        if not doc:
-            logger.warning(
-                "mongo_profile_adapter.get_student_profile.not_found",
+        except Exception as e:
+            logger.error(
+                "mongo_profile_store.get_student_profile.unexpected_error",
                 log_type="technical",
                 user_id=user_id,
+                error=str(e),
             )
+            raise ProfileStoreError("An unexpected error occurred while fetching a student profile.") from e
+
+        if not doc:
             return None
 
         try:
             return self._deserialize_profile(doc)
         except (KeyError, TypeError, ValueError) as e:
             logger.error(
-                "mongo_profile_adapter.get_student_profile.deserialize_failed",
+                "mongo_profile_store.get_student_profile.deserialize_failed",
                 log_type="technical",
                 user_id=user_id,
                 error=str(e),
@@ -82,6 +85,14 @@ class MongoProfileAdapter(ProfileStorePort):
             raise ProfileStoreError(
                 f"Corrupt profile document for user '{user_id}'."
             ) from e
+        except Exception as e:
+            logger.error(
+                "mongo_profile_store.get_student_profile.unexpected_error",
+                log_type="technical",
+                user_id=user_id,
+                error=str(e),
+            )
+            raise ProfileStoreError("An unexpected error occurred while deserializing a student profile.") from e
 
     async def update_student_profile(
         self,
@@ -119,7 +130,7 @@ class MongoProfileAdapter(ProfileStorePort):
             )
         except PyMongoError as e:
             logger.error(
-                "mongo_profile_adapter.update_student_profile.failed",
+                "mongo_profile_store.update_student_profile.failed",
                 log_type="technical",
                 user_id=user_id,
                 subject=subject.value,
@@ -129,6 +140,16 @@ class MongoProfileAdapter(ProfileStorePort):
             raise ProfileStoreError(
                 f"Failed to update profile for user '{user_id}' in MongoDB."
             ) from e
+        except Exception as e:
+            logger.error(
+                "mongo_profile_store.update_student_profile.unexpected_error",
+                log_type="technical",
+                user_id=user_id,
+                subject=subject.value,
+                topic=topic,
+                error=str(e),
+            )
+            raise ProfileStoreError("An unexpected error occurred while updating a student profile.") from e
 
     # ── helpers ───────────────────────────────────────────────────────────────
 

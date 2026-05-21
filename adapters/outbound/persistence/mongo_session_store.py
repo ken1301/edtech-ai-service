@@ -70,12 +70,6 @@ class MongoSessionAdapter(SessionStorePort):
     ) -> None:
         """Persist a batch of messages to MongoDB (called during compression or session close)."""
         if not messages:
-            logger.warning(
-                "mongo_session_adapter.save_messages.empty",
-                log_type="technical",
-                session_id=session_id,
-                user_id=user_id,
-            )
             return
 
         doc = {
@@ -91,7 +85,7 @@ class MongoSessionAdapter(SessionStorePort):
             await self._col.insert_one(doc)
         except PyMongoError as e:
             logger.error(
-                "mongo_session_adapter.save_messages.failed",
+                "mongo_session_store.save_messages.failed",
                 log_type="technical",
                 session_id=session_id,
                 user_id=user_id,
@@ -103,6 +97,18 @@ class MongoSessionAdapter(SessionStorePort):
             raise SessionStoreError(
                 f"Failed to save messages for session '{session_id}' to MongoDB."
             ) from e
+        except Exception as e:
+            logger.error(
+                "mongo_session_store.save_messages.unexpected_error",
+                log_type="technical",
+                session_id=session_id,
+                user_id=user_id,
+                subject=subject.value,
+                topic=topic,
+                message_count=len(messages),
+                error=str(e),
+            )
+            raise SessionStoreError("An unexpected error occurred while saving session messages.") from e
 
     async def get_history_messages(self, session_id: str) -> list[Message]:
         """
@@ -122,7 +128,7 @@ class MongoSessionAdapter(SessionStorePort):
 
         except PyMongoError as e:
             logger.error(
-                "mongo_session_adapter.get_history_messages.failed",
+                "mongo_session_store.get_history_messages.failed",
                 log_type="technical",
                 session_id=session_id,
                 error=str(e),
@@ -130,13 +136,14 @@ class MongoSessionAdapter(SessionStorePort):
             raise SessionStoreError(
                 f"Failed to retrieve history messages for session '{session_id}' from MongoDB."
             ) from e
-
-        if not all_messages:
-            logger.warning(
-                "mongo_session_adapter.get_history_messages.empty",
+        except Exception as e:
+            logger.error(
+                "mongo_session_store.get_history_messages.unexpected_error",
                 log_type="technical",
                 session_id=session_id,
+                error=str(e),
             )
+            raise SessionStoreError("An unexpected error occurred while retrieving session history.") from e
 
         return all_messages
 
