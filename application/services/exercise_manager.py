@@ -3,6 +3,9 @@ from typing import List
 from domain.ports.exercise_store_port import ExerciseStorePort
 from domain.models.exercise import Exercise
 
+from domain.exceptions import ExerciseManagerError, ExerciseStoreError
+
+from infrastructure.logging import logger
 
 
 class ExerciseManager:
@@ -11,6 +14,35 @@ class ExerciseManager:
     def __init__(self, exercise_store_port: ExerciseStorePort):
         self._exercise_store_port = exercise_store_port
 
-    async def save_exercise(self, exercise: Exercise) -> bool:
+    async def save_exercise(
+        self, 
+        exercise_id: str,
+        author_id: str,
+        exercise: Exercise
+    ) -> bool:
         """Save an exercise to the exercise store."""
-        pass
+        try:
+            result = await self._exercise_store_port.save_exercise(
+                exercise_id=exercise_id,
+                author_id=author_id,
+                exercise=exercise
+            )
+            return result
+        
+        except ExerciseStoreError as e:
+            logger.error(
+                "exercise_manager.save_exercise.failed",
+                log_type="technical",
+                exercise_id=exercise_id,
+                error=str(e),
+            )
+            raise ExerciseManagerError("Failed to save exercise to the exercise store.") from e
+
+        except Exception as e:
+            logger.error(
+                "exercise_manager.save_exercise.unexpected.failed",
+                log_type="technical",
+                exercise_id=exercise_id,
+                error=str(e),
+            )
+            raise ExerciseManagerError("Unexpected error while saving exercise.") from e

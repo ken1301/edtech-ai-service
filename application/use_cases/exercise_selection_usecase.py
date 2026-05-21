@@ -7,7 +7,6 @@ from application.services.profile_manager import ProfileManager
 from application.stateless_services.docs_transform import PDFToMarkdownTransformer
 from application.stateless_services.adaptive_learning_service import AdaptiveLearningService
 
-from domain.models.document import PDFDocument, MarkdownDocument, ImageDocument
 from domain.models.exercise import Exercise, ExerciseForPurpose
 
 from domain.exceptions import (
@@ -73,11 +72,11 @@ class ExerciseSelectionUseCase:
                     markdown_document.content = markdown_document.content.replace(image.filename, image_url)
 
             # 4. Build a prompt for the chat service using the transformed Markdown content then send it to the chat service
-            extract_exercise_prompt = await self._prompt_builder.build_exercise_extraction_prompt()
+            extract_exercise_prompt = await self._prompt_builder.exercise_extraction_prompt()
             chat_response = await self._llm_manager.generate_response(
                 system_prompt=extract_exercise_prompt,
                 messages=[{"role": "user", "content": markdown_document.content}],
-                response_model=list[Exercise]
+                response_model=Exercise
             )
             formatted_exercises = chat_response.content
 

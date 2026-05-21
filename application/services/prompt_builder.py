@@ -27,6 +27,9 @@ class PromptBuilder:
     with open(_PROMPT_TEMPLATE_DIR / "summarize_session_prompt.txt", "r", encoding="utf-8") as f:
         SUMMARIZE_SESSION_PROMPT = f.read()
 
+    with open(_PROMPT_TEMPLATE_DIR / "exercise_extraction_prompt.txt", "r", encoding="utf-8") as f:
+        EXERCISE_EXTRACTION_PROMPT = f.read()
+
     def __init__(
         self,
         profile_store: ProfileStorePort
@@ -156,3 +159,20 @@ class PromptBuilder:
                 error=str(e),
             )
             raise PromptGenerationError("Failed to generate compress history prompt.") from e
+
+
+    async def exercise_extraction_prompt(self) -> str:
+        try:
+            logger.info(
+                "prompt_builder.exercise_extraction_prompt.completed",
+                log_type="business",
+            )
+            return self.EXERCISE_EXTRACTION_PROMPT
+        
+        except Exception as e:
+            logger.error(
+                "prompt_builder.exercise_extraction_prompt.failed",
+                log_type="technical",
+                error=str(e),
+            )
+            raise PromptGenerationError("Failed to generate exercise extraction prompt.") from e
