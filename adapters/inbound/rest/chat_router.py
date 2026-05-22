@@ -5,6 +5,7 @@ from adapters.inbound.rest.schemas import ChatRequest
 from infrastructure.container import Container
 from application.use_cases.chatbot_usecase import ChatbotUseCase
 from domain.models.response import ChatResponse
+from domain.exceptions import AuthorizationError, ChatBotUseCaseError
 
 router = APIRouter()
 
@@ -34,6 +35,18 @@ async def chat(
         )
 
         return response
+
+    except AuthorizationError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Authorization failed for this session.",
+        )
+
+    except ChatBotUseCaseError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
 
     except HTTPException:
         raise
