@@ -1,5 +1,3 @@
-from typing import List
-
 from domain.ports.exercise_store_port import ExerciseStorePort
 from domain.models.exercise import Exercise
 
@@ -27,15 +25,15 @@ class ExerciseManager:
                 author_id=author_id,
                 exercise=exercise
             )
+            logger.info(
+                "exercise_manager.save_exercise.completed",
+                log_type="business",
+                exercise_id=exercise_id,
+                author_id=author_id,
+            )
             return result
         
         except ExerciseStoreError as e:
-            logger.error(
-                "exercise_manager.save_exercise.failed",
-                log_type="technical",
-                exercise_id=exercise_id,
-                error=str(e),
-            )
             raise ExerciseManagerError("Failed to save exercise to the exercise store.") from e
 
         except Exception as e:
@@ -44,5 +42,6 @@ class ExerciseManager:
                 log_type="technical",
                 exercise_id=exercise_id,
                 error=str(e),
+                exc_info=True,
             )
             raise ExerciseManagerError("Unexpected error while saving exercise.") from e

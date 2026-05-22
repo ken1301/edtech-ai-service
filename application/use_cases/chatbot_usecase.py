@@ -1,6 +1,4 @@
-from fastapi import BackgroundTasks, HTTPException, status
-
-from datetime import datetime
+from fastapi import BackgroundTasks
 
 from typing import List, Dict, Any, Tuple
 
@@ -21,6 +19,7 @@ from domain.exceptions import (
     AuthorizationError,
     SyncAndCloseSessionError,
     CompressSessionHistoryError,
+    ChatBotUseCaseError,
 )
 
 from infrastructure.logging import logger
@@ -170,89 +169,22 @@ class ChatbotUseCase:
 
             return chatbot_response
         
-        except AuthorizationError as e:
-            logger.warning(
-                "chatbot.authorization.failed",
-                session_id=session_id,
-                log_type="technical",
-                error=str(e),
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Authorization failed for this session.",
-            )
-        
-        except PromptGenerationError as e:
+        except (
+            PromptGenerationError,
+            LLMManagerError,
+            SessionManagerError,
+            ProfileManagerError,
+            SyncAndCloseSessionError,
+            CompressSessionHistoryError,
+        ) as e:
             logger.error(
-                "chatbot.prompt_generation.failed",
+                "chatbot.run.failed",
                 session_id=session_id,
                 log_type="technical",
                 error=str(e),
+                exc_info=True,
             )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Prompt generation failed during chatbot response generation.",
-            )
-        
-        except LLMManagerError as e:
-            logger.error(
-                "chatbot.llm_manager.failed",
-                session_id=session_id,
-                log_type="technical",
-                error=str(e),
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Chat service failed during chatbot response generation.",
-            )
-        
-        except SessionManagerError as e:
-            logger.error(
-                "chatbot.session_manager.failed",
-                session_id=session_id,
-                log_type="technical",
-                error=str(e),
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Session manager failed during chatbot response generation.",
-            )
-        
-        except ProfileManagerError as e:
-            logger.error(
-                "chatbot.profile_manager.failed",
-                session_id=session_id,
-                log_type="technical",
-                error=str(e),
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Profile manager failed during chatbot response generation.",
-            )
-        
-        except SyncAndCloseSessionError as e:
-            logger.error(
-                "chatbot.sync_and_close_session.failed",
-                session_id=session_id,
-                log_type="technical",
-                error=str(e),
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to sync and close the session.",
-            )
-        
-        except CompressSessionHistoryError as e:
-            logger.error(
-                "chatbot.compress_session_history.failed",
-                session_id=session_id,
-                log_type="technical",
-                error=str(e),
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to compress session history.",
-            )
+            raise ChatBotUseCaseError("Failed to process chatbot request.") from e
         
         except Exception as e:
             logger.error(
@@ -260,9 +192,7 @@ class ChatbotUseCase:
                 session_id=session_id,
                 log_type="technical",
                 error=str(e),
+                exc_info=True,
             )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="An unexpected error occurred.",
-            )
+            raise ChatBotUseCaseError("An unexpected error occurred.") from e
         

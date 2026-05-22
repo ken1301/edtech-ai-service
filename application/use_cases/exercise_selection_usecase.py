@@ -107,6 +107,7 @@ class ExerciseSelectionUseCase:
                 user_id=user_id,
                 document_url=document_url,
                 error=str(e),
+                exc_info=True,
             )
             raise ExerciseSelectionUseCaseError("Failed to fetch PDF document from cloud storage.") from e
         
@@ -117,6 +118,7 @@ class ExerciseSelectionUseCase:
                 user_id=user_id,
                 document_url=document_url,
                 error=str(e),
+                exc_info=True,
             )
             raise ExerciseSelectionUseCaseError("Failed to generate response from LLM manager.") from e
         
@@ -127,6 +129,7 @@ class ExerciseSelectionUseCase:
                 user_id=user_id,
                 document_url=document_url,
                 error=str(e),
+                exc_info=True,
             )
             raise ExerciseSelectionUseCaseError("Failed to generate prompt for exercise extraction.") from e
         
@@ -137,6 +140,7 @@ class ExerciseSelectionUseCase:
                 user_id=user_id,
                 document_url=document_url,
                 error=str(e),
+                exc_info=True,
             )
             raise ExerciseSelectionUseCaseError("Failed to retrieve student profile for exercise selection.") from e
         
@@ -147,6 +151,7 @@ class ExerciseSelectionUseCase:
                 user_id=user_id,
                 document_url=document_url,
                 error=str(e),
+                exc_info=True,
             )
             raise ExerciseSelectionUseCaseError("Failed to save or retrieve exercises from the exercise manager.") from e
         
@@ -157,6 +162,7 @@ class ExerciseSelectionUseCase:
                 user_id=user_id,
                 document_url=document_url,
                 error=str(e),
+                exc_info=True,
             )
             raise ExerciseSelectionUseCaseError("Failed to transform PDF document to Markdown format.") from e
         
@@ -167,6 +173,7 @@ class ExerciseSelectionUseCase:
                 user_id=user_id,
                 document_url=document_url,
                 error=str(e),
+                exc_info=True,
             )
             raise ExerciseSelectionUseCaseError("Failed to analyze problem for exercise selection.") from e
         
@@ -177,6 +184,7 @@ class ExerciseSelectionUseCase:
                 user_id=user_id,
                 document_url=document_url,
                 error=str(e),
+                exc_info=True,
             )
             raise ExerciseSelectionUseCaseError("Unexpected error during exercise selection process.") from e
 

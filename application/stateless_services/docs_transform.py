@@ -42,6 +42,12 @@ class PDFToMarkdownTransformer:
                 content=markdown_content
             )
 
+            logger.info(
+                "pdf_to_markdown_transformer.execute.completed",
+                log_type="business",
+                document_id=pdf_document.document_id,
+                image_count=len(image_set),
+            )
             return markdown_document, image_set
 
         except Exception as e:
@@ -50,5 +56,6 @@ class PDFToMarkdownTransformer:
                 log_type="technical",
                 document_id=pdf_document.document_id,
                 error=str(e),
+                exc_info=True,
             )
             raise DocumentTransformationError("Failed to transform PDF document to Markdown.") from e

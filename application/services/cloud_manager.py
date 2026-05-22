@@ -25,12 +25,6 @@ class CloudManager:
             return pdf_document
 
         except CloudAdapterError as e:
-            logger.error(
-                "cloud_manager.fetch_pdf_document.failed",
-                log_type="technical",
-                document_url=document_url,
-                error=str(e),
-            )
             raise CloudManagerError("Failed to fetch PDF document from cloud storage.") from e
         
         except Exception as e:
@@ -39,6 +33,7 @@ class CloudManager:
                 log_type="technical",
                 document_url=document_url,
                 error=str(e),
+                exc_info=True,
             )
             raise CloudManagerError("Unexpected error while fetching PDF document from cloud storage.") from e
 
@@ -55,12 +50,6 @@ class CloudManager:
             return image_url
 
         except CloudAdapterError as e:
-            logger.error(
-                "cloud_manager.upload_image_document.failed",
-                log_type="technical",
-                document_url=image_document.url,
-                error=str(e),
-            )
             raise CloudManagerError("Failed to upload image document to cloud storage.") from e
 
         except Exception as e:
@@ -69,5 +58,6 @@ class CloudManager:
                 log_type="technical",
                 document_url=image_document.url,
                 error=str(e),
+                exc_info=True,
             )
             raise CloudManagerError("Unexpected error while uploading image document to cloud storage.") from e

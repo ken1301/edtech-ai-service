@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 from domain.ports.profile_store_port import ProfileStorePort
@@ -85,6 +84,7 @@ class PromptBuilder:
                 subject=subject.value,
                 topic=topic,
                 error=str(e),
+                exc_info=True,
             )
             raise PromptGenerationError("Failed to get student context for prompt generation.") from e
 
@@ -103,18 +103,13 @@ class PromptBuilder:
             logger.info(
                 "prompt_builder.chatbot_system_prompt.completed",
                 log_type="business",
+                user_id=user_id,
+                subject=subject.value,
+                topic=topic,
             )
             return system_prompt
         
         except ProfileStoreError as e:
-            logger.error(
-                "prompt_builder.chatbot_system_prompt.failed",
-                log_type="technical",
-                user_id=user_id,
-                subject=subject.value,
-                topic=topic,
-                error=str(e),
-            )
             raise PromptGenerationError("Failed to generate chatbot system prompt.") from e
         
         except Exception as e:
@@ -125,6 +120,7 @@ class PromptBuilder:
                 subject=subject.value,
                 topic=topic,
                 error=str(e),
+                exc_info=True,
             )
             raise PromptGenerationError("Unexpected error during chatbot system prompt generation.") from e
 
@@ -141,6 +137,7 @@ class PromptBuilder:
                 "prompt_builder.summarize_session_prompt.failed",
                 log_type="technical",
                 error=str(e),
+                exc_info=True,
             )
             raise PromptGenerationError("Failed to generate summarize session prompt.") from e
 
@@ -157,6 +154,7 @@ class PromptBuilder:
                 "prompt_builder.compress_history_prompt.failed",
                 log_type="technical",
                 error=str(e),
+                exc_info=True,
             )
             raise PromptGenerationError("Failed to generate compress history prompt.") from e
 
@@ -174,5 +172,6 @@ class PromptBuilder:
                 "prompt_builder.exercise_extraction_prompt.failed",
                 log_type="technical",
                 error=str(e),
+                exc_info=True,
             )
             raise PromptGenerationError("Failed to generate exercise extraction prompt.") from e

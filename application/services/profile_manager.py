@@ -1,5 +1,6 @@
 from domain.ports.profile_store_port import ProfileStorePort
 
+from domain.models.curriculum import Subject
 from domain.models.profile import TopicMastery, StudentPreference, StudentProfile
 
 from domain.exceptions import ProfileManagerError, ProfileStoreError
@@ -19,15 +20,14 @@ class ProfileManager:
         """Fetch the student profile from the profile store (MongoDB) using the user ID."""
         try: 
             student_profile = await self._profile_store.get_student_profile(user_id=user_id)
+            logger.info(
+                "profile_manager.get_student_profile.completed",
+                log_type="business",
+                user_id=user_id,
+            )
             return student_profile
         
         except ProfileStoreError as e:
-            logger.error(
-                "profile_manager.get_student_profile.failed",
-                log_type="technical",
-                user_id=user_id,
-                error=str(e),
-            )
             raise ProfileManagerError("Failed to retrieve student profile from the profile store.") from e
 
         except Exception as e:
@@ -36,6 +36,7 @@ class ProfileManager:
                 log_type="technical",
                 user_id=user_id,
                 error=str(e),
+                exc_info=True,
             )
             raise ProfileManagerError("Unexpected error while retrieving student profile.") from e
 
@@ -64,14 +65,6 @@ class ProfileManager:
             )
         
         except ProfileStoreError as e:
-            logger.error(
-                "profile_manager.update_student_profile.failed",
-                log_type="technical",
-                user_id=user_id,
-                subject=subject,
-                topic=topic,
-                error=str(e),
-            )
             raise ProfileManagerError("Failed to update student profile in the profile store.") from e
         
         except Exception as e:
@@ -82,5 +75,6 @@ class ProfileManager:
                 subject=subject,
                 topic=topic,
                 error=str(e),
+                exc_info=True,
             )
             raise ProfileManagerError("Unexpected error while updating student profile.") from e

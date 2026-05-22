@@ -1,5 +1,4 @@
-from typing import Dict, Any, Tuple
-import json
+from typing import Dict, Any
 
 from application.services.llm_manager import LLMManager
 from application.services.session_manager import SessionManager
@@ -13,10 +12,12 @@ from domain.models.session import SessionSummary
 from infrastructure.logging import logger
 
 from domain.exceptions import (
-    LLMAdapterError,
+    LLMManagerError,
+    SessionManagerError,
+    ProfileManagerError,
+    PromptGenerationError,
     SyncAndCloseSessionError,
     CompressSessionHistoryError,
-    PromptGenerationError
 )
 
 class LearningService:
@@ -93,23 +94,8 @@ class LearningService:
                 session_id=session_id,
             )
 
-        except LLMAdapterError as e:
-            logger.error(
-                "sync_and_close_session.llm.failed",
-                log_type="technical",
-                session_id=session_id,
-                error=str(e),
-            )
-            raise SyncAndCloseSessionError("LLM failed during session summarization.") from e
-
-        except PromptGenerationError as e:
-            logger.error(
-                "sync_and_close_session.prompt.failed",
-                log_type="technical",
-                session_id=session_id,
-                error=str(e),
-            )
-            raise SyncAndCloseSessionError("Failed to generate summary prompt.") from e
+        except (LLMManagerError, SessionManagerError, ProfileManagerError, PromptGenerationError) as e:
+            raise SyncAndCloseSessionError("Failed to sync and close the session.") from e
 
         except Exception as e:
             logger.error(
@@ -117,6 +103,7 @@ class LearningService:
                 log_type="technical",
                 session_id=session_id,
                 error=str(e),
+                exc_info=True,
             )
             raise SyncAndCloseSessionError("Unexpected error during sync and close.") from e
         
@@ -157,24 +144,8 @@ class LearningService:
             return metadata
 
 
-        except LLMAdapterError as e:
-            logger.error(
-                "compress_history.llm.failed",
-                log_type="technical",
-                session_id=session_id,
-                error=str(e),
-            )
-            raise CompressSessionHistoryError("LLM failed during history compression.") from e
-
-
-        except PromptGenerationError as e:
-            logger.error(
-                "compress_history.prompt.failed",
-                log_type="technical",
-                session_id=session_id,
-                error=str(e),
-            )
-            raise CompressSessionHistoryError("Failed to generate compression prompt.") from e
+        except (LLMManagerError, SessionManagerError, PromptGenerationError) as e:
+            raise CompressSessionHistoryError("Failed to compress session history.") from e
 
 
         except Exception as e:
@@ -183,6 +154,7 @@ class LearningService:
                 log_type="technical",
                 session_id=session_id,
                 error=str(e),
+                exc_info=True,
             )
             raise CompressSessionHistoryError("Unexpected error during history compression.") from e
         

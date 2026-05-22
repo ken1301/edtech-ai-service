@@ -34,12 +34,6 @@ class SessionManager:
         
 
         except SessionStoreError as e: 
-            logger.error(
-                "session_manager.redis_get_metadata.failed",
-                log_type="technical",
-                session_id=session_id,
-                error=str(e),
-            )
             raise SessionManagerError("Failed to get session metadata from Redis.") from e
         
         except Exception as e:
@@ -48,6 +42,7 @@ class SessionManager:
                 log_type="technical",
                 session_id=session_id,
                 error=str(e),
+                exc_info=True,
             )
             raise SessionManagerError("Unexpected error while getting session metadata from Redis.") from e
         
@@ -64,12 +59,6 @@ class SessionManager:
             )        
             
         except SessionStoreError as e:
-            logger.error(
-                "session_manager.redis_save_metadata.failed",
-                log_type="technical",
-                session_id=session_id,
-                error=str(e),
-            )
             raise SessionManagerError("Failed to save session metadata to Redis.") from e
         
         except Exception as e:
@@ -78,6 +67,7 @@ class SessionManager:
                 log_type="technical",
                 session_id=session_id,
                 error=str(e),
+                exc_info=True,
             )
             raise SessionManagerError("Unexpected error while saving session metadata to Redis.") from e
 
@@ -95,12 +85,6 @@ class SessionManager:
             return messages
         
         except SessionStoreError as e:
-            logger.error(
-                "session_manager.redis_get_right.failed",
-                log_type="technical",
-                session_id=session_id,
-                error=str(e),
-            )
             raise SessionManagerError("Failed to get messages from Redis.") from e
         
         except Exception as e:
@@ -109,6 +93,7 @@ class SessionManager:
                 log_type="technical",
                 session_id=session_id,
                 error=str(e),
+                exc_info=True,
             )
             raise SessionManagerError("Unexpected error while getting messages from Redis.") from e
         
@@ -130,12 +115,6 @@ class SessionManager:
             )
         
         except SessionStoreError as e:
-            logger.error(
-                "session_manager.redis_save_turn.failed",
-                log_type="technical",
-                session_id=session_id,
-                error=str(e),
-            )
             raise SessionManagerError("Failed to save message turn to Redis.") from e
         
         except Exception as e:
@@ -144,6 +123,7 @@ class SessionManager:
                 log_type="technical",
                 session_id=session_id,
                 error=str(e),
+                exc_info=True,
             )
             raise SessionManagerError("Unexpected error while saving message turn to Redis.") from e
     
@@ -162,12 +142,6 @@ class SessionManager:
             return messages
         
         except SessionStoreError as e:
-            logger.error(
-                "session_manager.redis_get_left.failed",
-                log_type="technical",
-                session_id=session_id,
-                error=str(e),
-            )
             raise SessionManagerError("Failed to get messages from Redis.") from e
         
         except Exception as e:
@@ -175,7 +149,9 @@ class SessionManager:
                 "session_manager.redis_get_left.unexpected.failed",
                 log_type="technical",
                 session_id=session_id,
-                error=str(e),            )
+                error=str(e),
+                exc_info=True,
+            )
             raise SessionManagerError("Unexpected error while getting messages from Redis.") from e
         
     async def redis_delete_left(self, session_id: str, limit: int):
@@ -190,12 +166,6 @@ class SessionManager:
             )
         
         except SessionStoreError as e:
-            logger.error(
-                "session_manager.redis_delete_left.failed",
-                log_type="technical",
-                session_id=session_id,
-                error=str(e),
-            )
             raise SessionManagerError("Failed to delete messages from Redis.") from e
         
         except Exception as e:
@@ -204,6 +174,7 @@ class SessionManager:
                 log_type="technical",
                 session_id=session_id,
                 error=str(e),
+                exc_info=True,
             )
             raise SessionManagerError("Unexpected error while deleting messages from Redis.") from e
         
@@ -219,12 +190,6 @@ class SessionManager:
             )
         
         except SessionStoreError as e:
-            logger.error(
-                "session_manager.redis_delete_session.failed",
-                log_type="technical",
-                session_id=session_id,
-                error=str(e),
-            )
             raise SessionManagerError("Failed to delete session from Redis.") from e
         
         except Exception as e:
@@ -233,6 +198,7 @@ class SessionManager:
                 log_type="technical",
                 session_id=session_id,
                 error=str(e),
+                exc_info=True,
             )
             raise SessionManagerError("Unexpected error while deleting session from Redis.") from e
         
@@ -263,12 +229,6 @@ class SessionManager:
             )
 
         except SessionStoreError as e:
-            logger.error(
-                "session_manager.mongo_save_messages.failed",
-                log_type="technical",
-                session_id=session_id,
-                error=str(e),
-            )
             raise SessionManagerError("Failed to save messages to MongoDB.") from e
         
         except Exception as e:
@@ -277,6 +237,7 @@ class SessionManager:
                 log_type="technical",
                 session_id=session_id,
                 error=str(e),
+                exc_info=True,
             )
             raise SessionManagerError("Unexpected error while saving messages to MongoDB.") from e
         
@@ -295,12 +256,6 @@ class SessionManager:
             return messages
 
         except SessionStoreError as e:
-            logger.error(
-                "session_manager.mongo_get_history_messages.failed",
-                log_type="technical",
-                session_id=session_id,
-                error=str(e),
-            )
             raise SessionManagerError("Failed to get session messages from MongoDB.") from e
         
         except Exception as e:
@@ -309,6 +264,7 @@ class SessionManager:
                 log_type="technical",
                 session_id=session_id,
                 error=str(e),
+                exc_info=True,
             )
             raise SessionManagerError("Unexpected error while getting session messages from MongoDB.") from e
         

@@ -1,6 +1,5 @@
 from typing import Optional
 from pydantic import BaseModel
-import time
 
 from domain.ports.llm_port import LLMPort
 
@@ -36,16 +35,12 @@ class LLMManager:
             logger.info(
                 "llm_manager.generate_response.completed",
                 log_type="business",
+                model_name=llm_response.model_name,
             )
 
             return llm_response
         
         except LLMAdapterError as e:
-            logger.error(
-                "llm_manager.generate_response.failed",
-                log_type="technical",
-                error=str(e),
-            )
             raise LLMManagerError("Failed to generate chatbot response from LLM.") from e
 
         # some specific exceptions can be caught and re-raised as LLMAdapterError for better error handling in the use case layer
@@ -55,6 +50,7 @@ class LLMManager:
                 "llm_manager.generate_response.unexpected.failed",
                 log_type="technical",
                 error=str(e),
+                exc_info=True,
             )
             raise LLMManagerError("Failed to generate response from LLM.") from e
         
