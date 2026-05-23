@@ -42,6 +42,12 @@ class MongoExerciseAdapter(ExerciseStorePort):
                 },
                 upsert=True,
             )
+            logger.debug(
+                "mongo_exercise_store.save_exercise.completed",
+                log_type="debug",
+                exercise_id=exercise_id,
+                author_id=author_id,
+            )
             return result.acknowledged
         except PyMongoError as e:
             logger.error(
@@ -91,6 +97,11 @@ class MongoExerciseAdapter(ExerciseStorePort):
             raise ExerciseStoreError(f"Exercise '{exercise_id}' was not found in MongoDB.")
 
         try:
+            logger.debug(
+                "mongo_exercise_store.get_exercise_by_id.completed",
+                log_type="debug",
+                exercise_id=exercise_id
+            )
             return Exercise(**doc["exercise"])
         except (KeyError, TypeError, ValueError) as e:
             logger.error(
@@ -112,6 +123,11 @@ class MongoExerciseAdapter(ExerciseStorePort):
     async def delete_exercise(self, exercise_id: str) -> bool:
         try:
             result = await self._col.delete_one({"exercise_id": exercise_id})
+            logger.debug(
+                "mongo_exercise_store.delete_exercise.completed",
+                log_type="debug",
+                exercise_id=exercise_id,
+            )
             return result.deleted_count > 0
         except PyMongoError as e:
             logger.error(

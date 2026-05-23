@@ -71,9 +71,19 @@ class MongoProfileAdapter(ProfileStorePort):
             raise ProfileStoreError("An unexpected error occurred while fetching a student profile.") from e
 
         if not doc:
+            logger.warning(
+                "mongo_profile_store.get_student_profile.completed.not_found",
+                log_type="debug",
+                user_id=user_id,
+            )
             return None
 
         try:
+            logger.debug(
+                "mongo_profile_store.get_student_profile.completed",
+                log_type="debug",
+                user_id=user_id,
+            )
             return self._deserialize_profile(doc)
         except (KeyError, TypeError, ValueError) as e:
             logger.error(
@@ -127,6 +137,11 @@ class MongoProfileAdapter(ProfileStorePort):
                 {"user_id": user_id},
                 update,
                 upsert=True,
+            )
+            logger.debug(
+                "mongo_profile_store.update_student_profile.completed",
+                log_type="debug",
+                user_id=user_id,
             )
         except PyMongoError as e:
             logger.error(

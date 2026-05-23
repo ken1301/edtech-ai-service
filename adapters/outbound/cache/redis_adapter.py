@@ -227,6 +227,11 @@ class RedisSessionAdapter(SessionStorePort):
             )
             raise SessionStoreError("An unexpected error occurred while processing session metadata.") from e
 
+        logger.debug(
+            "redis_adapter.get_metadata.completed",
+            log_type="debug",
+            session_id=session_id,
+        )
         return metadata
 
     async def save_metadata(self, session_id: str, metadata: dict) -> None:
@@ -235,6 +240,11 @@ class RedisSessionAdapter(SessionStorePort):
                 self._meta_key(session_id),
                 json.dumps(metadata),
                 ex=self._ttl,
+            )
+            logger.debug(
+                "redis_adapter.save_metadata.completed",
+                log_type="debug",
+                session_id=session_id,
             )
         except RedisError as e:
             logger.error(
@@ -269,6 +279,11 @@ class RedisSessionAdapter(SessionStorePort):
             pipe.rpush(msg_key, self._serialize_message(assistant_message))
             pipe.expire(msg_key, self._ttl)
             await pipe.execute()
+            logger.debug(
+                "redis_adapter.save_turn.completed",
+                log_type="debug",
+                session_id=session_id,
+            )
         except RedisError as e:
             logger.error(
                 "redis_adapter.save_turn.failed",
@@ -316,6 +331,12 @@ class RedisSessionAdapter(SessionStorePort):
             raise SessionStoreError("An unexpected error occurred while fetching recent session messages.") from e
 
         try:
+            logger.debug(
+                "redis_adapter.get_right.completed",
+                log_type="debug",
+                session_id=session_id,
+                limit=limit,
+            )
             return [self._deserialize_message(r) for r in raws]
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.error(
@@ -362,6 +383,12 @@ class RedisSessionAdapter(SessionStorePort):
             raise SessionStoreError("An unexpected error occurred while fetching oldest session messages.") from e
 
         try:
+            logger.debug(
+                "redis_adapter.get_left.completed",
+                log_type="debug",
+                session_id=session_id,
+                limit=limit,
+            )
             return [self._deserialize_message(r) for r in raws]
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.error(
@@ -385,6 +412,12 @@ class RedisSessionAdapter(SessionStorePort):
     async def delete_left(self, session_id: str, limit: int) -> None:
         """Drop the N oldest messages via LTRIM (keeps [limit, -1])."""
         try:
+            logger.debug(
+                "redis_adapter.delete_left.completed",
+                log_type="debug",
+                session_id=session_id,
+                limit=limit,
+            )
             await self._redis.ltrim(self._msg_key(session_id), limit, -1)
         except RedisError as e:
             logger.error(
@@ -414,6 +447,11 @@ class RedisSessionAdapter(SessionStorePort):
             pipe.delete(self._msg_key(session_id))
             pipe.delete(self._meta_key(session_id))
             await pipe.execute()
+            logger.debug(
+                "redis_adapter.delete_session.completed",
+                log_type="debug",
+                session_id=session_id,
+            )
         except RedisError as e:
             logger.error(
                 "redis_adapter.delete_session.failed",

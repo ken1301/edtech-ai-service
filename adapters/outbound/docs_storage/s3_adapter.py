@@ -60,7 +60,13 @@ class S3Adapter(CloudPort):
 
     async def upload_pdf(self, document: PDFDocument) -> str:
         try:
-            return await asyncio.to_thread(self._upload_document, document, "pdfs", "application/pdf")
+            logger.debug(
+                "s3_adapter.upload_pdf.completed",
+                log_type="debug",
+                document_id=document.id,
+                filename=document.filename,
+            )
+            return await asyncio.to_thread(self._upload_document, document, "pdfs", "application/pdf")     
         except (BotoCoreError, ClientError) as e:
             logger.error(
                 "s3_adapter.upload_pdf.failed",
@@ -82,6 +88,11 @@ class S3Adapter(CloudPort):
 
     async def download_pdf(self, document_url: str) -> PDFDocument:
         try:
+            logger.debug(
+                "s3_adapter.download_pdf.completed",
+                log_type="debug",
+                document_url=document_url,
+            )
             return await asyncio.to_thread(self._download_pdf, document_url)
         except (BotoCoreError, ClientError) as e:
             logger.error(
@@ -102,6 +113,12 @@ class S3Adapter(CloudPort):
 
     async def upload_image(self, document: ImageDocument) -> str:
         try:
+            logger.debug(
+                "s3_adapter.upload_image.completed",
+                log_type="debug",
+                document_id=document.id,
+                filename=document.filename,
+            )
             return await asyncio.to_thread(self._upload_document, document, "images", "image/*")
         except (BotoCoreError, ClientError) as e:
             logger.error(
@@ -124,6 +141,11 @@ class S3Adapter(CloudPort):
 
     async def download_image(self, document_url: str) -> ImageDocument:
         try:
+            logger.debug(
+                "s3_adapter.download_image.completed",
+                log_type="debug",
+                document_url=document_url,
+            )
             return await asyncio.to_thread(self._download_image, document_url)
         except (BotoCoreError, ClientError) as e:
             logger.error(
@@ -144,6 +166,11 @@ class S3Adapter(CloudPort):
 
     async def delete_document(self, document_url: str) -> bool:
         try:
+            logger.debug(
+                "s3_adapter.delete_document.completed",
+                log_type="debug",
+                document_url=document_url,
+            )
             await asyncio.to_thread(self._delete_document, document_url)
             return True
         except (BotoCoreError, ClientError) as e:

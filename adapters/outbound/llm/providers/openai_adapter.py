@@ -112,6 +112,12 @@ class OpenaiAdapter(LLMPort):
             request_cost.labels(model=self.model).inc(total_cost)
             cost_per_request.labels(model=self.model).observe(total_cost)
 
+            logger.debug(
+                "openai_adapter.plain.completed",
+                log_type="debug",
+                model=self.model,
+            )
+
             return LLMResponse(
                 content=completion.choices[0].message.content,
                 model_name=self.model,
@@ -202,6 +208,13 @@ class OpenaiAdapter(LLMPort):
 
             request_cost.labels(model=self.model).inc(total_cost)
             cost_per_request.labels(model=self.model).observe(total_cost)
+
+            logger.debug(
+                "openai_adapter.structured.completed",
+                log_type="debug",
+                model=self.model,
+                response_model=response_model.__name__,
+            )
 
             return LLMResponse(
                 content=parsed,

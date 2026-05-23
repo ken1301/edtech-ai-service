@@ -70,6 +70,14 @@ class MongoSessionAdapter(SessionStorePort):
     ) -> None:
         """Persist a batch of messages to MongoDB (called during compression or session close)."""
         if not messages:
+            logger.warning(
+                "mongo_session_store.save_messages.completed.no_messages",
+                log_type="debug",
+                session_id=session_id,
+                user_id=user_id,
+                subject=subject.value,
+                topic=topic,
+            )
             return
 
         doc = {
@@ -83,6 +91,15 @@ class MongoSessionAdapter(SessionStorePort):
 
         try:
             await self._col.insert_one(doc)
+            logger.debug(
+                "mongo_session_store.save_messages.completed",
+                log_type="debug",
+                session_id=session_id,
+                user_id=user_id,
+                subject=subject.value,
+                topic=topic,
+                message_count=len(messages),
+            )
         except PyMongoError as e:
             logger.error(
                 "mongo_session_store.save_messages.failed",
@@ -145,6 +162,12 @@ class MongoSessionAdapter(SessionStorePort):
             )
             raise SessionStoreError("An unexpected error occurred while retrieving session history.") from e
 
+        logger.debug(
+            "mongo_session_store.get_history_messages.completed",
+            log_type="debug",
+            session_id=session_id,
+            message_count=len(all_messages),
+        )
         return all_messages
 
     # ── Methods not applicable to MongoDB ────────────────────────────────────
