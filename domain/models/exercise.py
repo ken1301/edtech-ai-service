@@ -34,6 +34,7 @@ class Approach(BaseModel):
     
 
 class Problem(BaseModel):
+    problem_id: int # (1, 2, 3, ...) unique identifier for the problem within an exercise
     question: str
     attachment_url: Optional[str] = None  # URL đến hình ảnh, video, hoặc tài liệu liên quan
 
