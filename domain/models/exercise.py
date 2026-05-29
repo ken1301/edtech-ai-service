@@ -62,3 +62,5 @@ class Exercise(BaseModel):
 
 class ExerciseForPurpose(BaseModel):
     problem_set: Dict[ProblemRole, List[Problem]]
+
+    # set max_approaches_per_problem and max_attemps_per_approach to guide the adaptive learning service in selecting exercises with appropriate complexity for the student
