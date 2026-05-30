@@ -1,6 +1,6 @@
-from application.services.llm_manager import LLMManager
+from application.stateless_services.llm_manager import LLMManager
 from application.services.exercise_manager import ExerciseManager
-from application.services.prompt_builder import PromptBuilder
+from application.stateless_services.prompt_builder import PromptBuilder
 from application.services.cloud_manager import CloudManager
 from application.services.profile_manager import ProfileManager
 

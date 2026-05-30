@@ -6,9 +6,9 @@ from domain.models.curriculum import Subject
 from domain.models.message import Message, Role
 from domain.models.response import ChatResponse
 
-from application.services.llm_manager import LLMManager
+from application.stateless_services.llm_manager import LLMManager
 from application.services.session_manager import SessionManager
-from application.services.prompt_builder import PromptBuilder
+from application.stateless_services.prompt_builder import PromptBuilder
 from application.stateless_services.learning_service import LearningService
 
 from domain.exceptions import (

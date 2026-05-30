@@ -11,10 +11,10 @@ from adapters.outbound.persistence.mongo_session_store import MongoSessionAdapte
 from adapters.outbound.persistence.mongo_exercise_store import MongoExerciseAdapter
 from adapters.outbound.docs_storage.s3_adapter import S3Adapter
 
-from application.services.prompt_builder import PromptBuilder
+from application.stateless_services.prompt_builder import PromptBuilder
 from application.services.session_manager import SessionManager
 from application.services.profile_manager import ProfileManager
-from application.services.llm_manager import LLMManager
+from application.stateless_services.llm_manager import LLMManager
 from application.stateless_services.learning_service import LearningService
 
 from application.use_cases.chatbot_usecase import ChatbotUseCase

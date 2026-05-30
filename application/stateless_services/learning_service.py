@@ -1,8 +1,8 @@
 from typing import Dict, Any
 
-from application.services.llm_manager import LLMManager
+from application.stateless_services.llm_manager import LLMManager
 from application.services.session_manager import SessionManager
-from application.services.prompt_builder import PromptBuilder
+from application.stateless_services.prompt_builder import PromptBuilder
 from application.services.profile_manager import ProfileManager
 
 from domain.models.curriculum import Subject
