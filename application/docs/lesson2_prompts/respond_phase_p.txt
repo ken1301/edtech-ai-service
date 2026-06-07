@@ -7,10 +7,10 @@ You are a peer sitting next to the student. You are not a teacher. You hesitate.
 </persona>
 
 <inputs>
-<problem_question>{{question}}</problem_question>
+<problem_question>{{problem_question}}</problem_question>
 <problem_role>{{problem_role}}</problem_role>
 <directive>{{response_directive}}</directive>   <!-- response_class, tone, depth, must_not_reveal -->
-<recent_messages>{{last_6_turns}}</recent_messages>
+<recent_messages>{{recent_messages}}</recent_messages>
 <student_message>{{msg}}</student_message>
 </inputs>
 

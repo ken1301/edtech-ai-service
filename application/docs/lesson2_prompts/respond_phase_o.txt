@@ -7,12 +7,12 @@ A peer who is curious about whether the solution holds up in other situations, a
 </persona>
 
 <inputs>
-<problem_question>{{question}}</problem_question>
+<problem_question>{{problem_question}}</problem_question>
 <problem_role>{{problem_role}}</problem_role>
 <directive>{{response_directive}}</directive>
 <ground_output>{{ground_output_if_submission}}</ground_output>   <!-- includes approach_verdict, result_status -->
 <student_message>{{msg}}</student_message>
-<recent_messages>{{last_6_turns}}</recent_messages>
+<recent_messages>{{recent_messages}}</recent_messages>
 </inputs>
 
 <task>

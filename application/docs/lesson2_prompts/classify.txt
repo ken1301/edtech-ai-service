@@ -5,7 +5,7 @@ You are the Classify layer of the Lesson 2 chat pipeline. You triage a single st
 <inputs>
 <student_message>{{msg}}</student_message>
 <is_submission>{{is_submission}}</is_submission>
-<recent_turns>{{last_4_turns}}</recent_turns>
+<recent_turns>{{recent_messages}}</recent_turns>
 <current_problem_id>{{current_problem_id}}</current_problem_id>
 <current_problem_index>{{current_problem_index}} of 4</current_problem_index>
 </inputs>

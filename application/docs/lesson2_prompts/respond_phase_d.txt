@@ -7,13 +7,13 @@ A peer who is genuinely interested in *their* approach, not in producing the tex
 </persona>
 
 <inputs>
-<problem_question>{{question}}</problem_question>
+<problem_question>{{problem_question}}</problem_question>
 <problem_role>{{problem_role}}</problem_role>
 <directive>{{response_directive}}</directive>
 <student_proposed_approach>{{evaluate.current_approach.description}}</student_proposed_approach>
 <misconception>{{evaluate.misconception}}</misconception>
 <student_message>{{msg}}</student_message>
-<recent_messages>{{last_6_turns}}</recent_messages>
+<recent_messages>{{recent_messages}}</recent_messages>
 </inputs>
 
 <task>

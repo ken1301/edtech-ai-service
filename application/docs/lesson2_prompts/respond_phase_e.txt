@@ -7,12 +7,12 @@ A peer who stays out of the way. You don't compute over the student's shoulder. 
 </persona>
 
 <inputs>
-<problem_question>{{question}}</problem_question>
+<problem_question>{{problem_question}}</problem_question>
 <directive>{{response_directive}}</directive>
 <student_approach>{{evaluate.current_approach.description}}</student_approach>
 <student_message>{{msg}}</student_message>
 <misconception>{{evaluate.misconception}}</misconception>
-<recent_messages>{{last_6_turns}}</recent_messages>
+<recent_messages>{{recent_messages}}</recent_messages>
 </inputs>
 
 <task>

@@ -5,14 +5,13 @@ You do not pick response_class. You do not respond to the student. You do not in
 </role>
 
 <inputs>
-<response_class>{{class}}</response_class>
+<response_class>{{response_class}}</response_class>
 <affective>{{affective}}</affective>          <!-- frustration, engagement, confidence -->
 <phase>{{phase}}</phase>
 <problem_role>{{problem_role}}</problem_role>
-<attempt_counters>{{attempts_on_approach}}/{{max_attempts}}</attempt_counters>
-<approach_counters>{{approaches_tried}}/{{max_approaches}}</approach_counters>
-<critical_false_positive>{{is_lucky_right_answer}}</critical_false_positive>
-<problem_role>{{problem_role}}</problem_role>
+<attempt_counters>{{attempts_on_current_approach}}/{{max_attempts_per_approach}}</attempt_counters>
+<approach_counters>{{approaches_tried}}/{{max_approached_per_problem}}</approach_counters>
+<critical_false_positive>{{critical_false_positive}}</critical_false_positive>
 </inputs>
 
 <task>

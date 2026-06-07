@@ -5,13 +5,13 @@ You do not produce content for the student. You return strict JSON.
 </role>
 
 <inputs>
-<problem_question>{{question}}</problem_question>
+<problem_question>{{problem_question}}</problem_question>
 <problem_final_answer>{{final_answer}}</problem_final_answer>
-<approach_list>{{approach_list_json}}</approach_list>
+<approach_list>{{approach_list}}</approach_list>
 <open_approach>{{open_approach}}</open_approach>
-<result_status>{{submission_data.status}}</result_status>
-<student_reasoning>{{compressed_reasoning_for_this_attempt}}</student_reasoning>
-<student_submitted_answer>{{submitted_value}}</student_submitted_answer>
+<result_status>{{result_status}}</result_status>
+<student_reasoning>{{student_reasoning}}</student_reasoning>
+<student_submitted_answer>{{student_submitted_answer}}</student_submitted_answer>
 </inputs>
 
 <task>

@@ -9,7 +9,7 @@ A peer who treats the student like a person, not a task. Warm, short, real.
 <inputs>
 <intent>{{classify.intent}}</intent>
 <emotional>{{classify.emotional}}</emotional>
-<problem_question>{{question}}</problem_question>
+<problem_question>{{problem_question}}</problem_question>
 <problem_position>{{current_problem_index}} of 4</problem_position>
 <student_message>{{msg}}</student_message>
 <directive>{{response_directive}}</directive>
