@@ -5,7 +5,7 @@ from application.stateless_services.prompt_builder import PromptBuilder
 
 from domain.models.lesson2_models.evaluate import Phase
 from domain.models.lesson2_models.response import ResponseInput
-from domain.models.lesson2_models.metadata import Lesson2LayerUsage
+from domain.models.lesson2_models.response import Lesson2LayerUsage
 
 
 class ResponseLayer:

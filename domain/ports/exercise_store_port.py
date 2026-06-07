@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 
-from domain.models.exercise import Exercise
+from domain.models.lesson2_models.exercise import Exercise
 
 class ExerciseStorePort(ABC):
 

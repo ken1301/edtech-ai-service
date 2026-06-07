@@ -53,6 +53,10 @@ class ProblemSelectionAnalysisError(Exception):
     """Raised when there is an error analyzing the problem for exercise selection."""
     pass
 
+class UpdateStudentProfileError(Exception):
+    """Raised when there is an error updating the student profile."""
+    pass
+
 class CompressSessionHistoryError(Exception):
     """Raised when session history compression fails."""
     pass

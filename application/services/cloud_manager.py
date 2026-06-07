@@ -1,6 +1,6 @@
 from domain.ports.cloud_port import CloudPort
 
-from domain.models.document import PDFDocument, ImageDocument, MarkdownDocument
+from domain.models.overall_models.document import PDFDocument, ImageDocument
 
 from domain.exceptions import CloudAdapterError, CloudManagerError
 

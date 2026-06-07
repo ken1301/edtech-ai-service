@@ -1,6 +1,6 @@
 from abc import abstractmethod, ABC
 
-from domain.models.document import PDFDocument, ImageDocument
+from domain.models.overall_models.document import PDFDocument, ImageDocument, MarkdownDocument
 
 class CloudPort(ABC):
     

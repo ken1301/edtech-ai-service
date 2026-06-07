@@ -1,9 +1,9 @@
 from application.stateless_services.prompt_builder import PromptBuilder
 from application.stateless_services.llm_manager import LLMManager
 
-from domain.models.lesson2_models.metadata import Lesson2ChatRequest
+from domain.models.lesson2_models.classify import Lesson2ChatRequest
 from domain.models.lesson2_models.classify import ClassifyInput, ClassifyOutput
-from domain.models.lesson2_models.metadata import Lesson2LayerUsage
+from domain.models.lesson2_models.classify import Lesson2LayerUsage
 
 class ClassifyLayer:
     """Layer responsible for classifying the user's message and determining the appropriate response based on the content and context of the message."""

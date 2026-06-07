@@ -1,1 +1,1 @@
-"""Domain models - Data transfer objects and entities"""
+# Models v2 package - refactored schema structure

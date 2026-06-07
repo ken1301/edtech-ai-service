@@ -1,13 +1,15 @@
 import json
 from datetime import datetime, timezone
-from typing import Optional
 
 import redis.asyncio as aioredis
 from redis.exceptions import RedisError
 
 from domain.ports.session_store_port import SessionStorePort
-from domain.models.message import Message, Role
-from domain.models.curriculum import Subject
+
+from domain.models.overall_models.message import Message
+from domain.models.overall_models.common import Role
+from domain.models.lesson2_models.meta import SessionMetadata
+
 from domain.exceptions import SessionStoreError
 
 from infrastructure.logging import logger
@@ -91,8 +93,8 @@ class RedisSessionAdapter(SessionStorePort):
     def _check_session_timeout(
         self,
         session_id: str,
-        metadata: dict,
-    ) -> tuple[dict, bool]:
+        metadata: SessionMetadata,
+    ) -> tuple[SessionMetadata, bool]:
         """
         Pure logic — no I/O, no exceptions raised.
 
@@ -105,21 +107,22 @@ class RedisSessionAdapter(SessionStorePort):
         Returns:
             (metadata, needs_persist)
         """
-        if not metadata.get("is_active", True):
+        if not metadata.is_active:
             return metadata, False
 
-        created_at_raw: Optional[str] = metadata.get("created_at")
-        if not created_at_raw:
+        if not metadata.created_at:
             return metadata, False
 
         try:
-            created_at: datetime = datetime.fromisoformat(created_at_raw)
+            created_at = metadata.created_at
+            if isinstance(created_at, str):
+                created_at = datetime.fromisoformat(created_at)
         except ValueError:
             logger.error(
                 "redis_adapter.timeout_check.invalid_created_at",
                 log_type="technical",
                 session_id=session_id,
-                created_at_raw=created_at_raw,
+                created_at_raw=str(metadata.created_at),
             )
             return metadata, False
 
@@ -130,31 +133,27 @@ class RedisSessionAdapter(SessionStorePort):
         elapsed_seconds = (now - created_at).total_seconds()
 
         if elapsed_seconds > self._session_timeout:
-            metadata["is_active"] = False
-            if not metadata.get("closed_at"):
-                metadata["closed_at"] = now.isoformat()
+            metadata.is_active = False
+            if not metadata.closed_at:
+                metadata.closed_at = now
             return metadata, True
 
         return metadata, False
 
     @staticmethod
-    def _ensure_metadata_defaults(metadata: dict) -> tuple[dict, bool]:
+    def _ensure_metadata_defaults(metadata: SessionMetadata) -> tuple[SessionMetadata, bool]:
         """Backfill missing metadata fields for older Redis session records."""
         needs_persist = False
 
-        if "created_at" not in metadata and metadata.get("created_at"):
-            metadata["created_at"] = metadata["created_at"]
-            needs_persist = True
-
-        if "turn_count" not in metadata:
-            metadata["turn_count"] = 0
+        if metadata.turn_count == 0 and not hasattr(metadata, '_turn_count_set'):
+            metadata.turn_count = 0
             needs_persist = True
 
         return metadata, needs_persist
 
     # ── SessionStorePort interface ────────────────────────────────────────────
 
-    async def get_metadata(self, session_id: str) -> dict:
+    async def get_metadata(self, session_id: str) -> SessionMetadata:
         """
         Fetch session metadata from Redis.
 
@@ -184,10 +183,11 @@ class RedisSessionAdapter(SessionStorePort):
             raise SessionStoreError("An unexpected error occurred while fetching session metadata.") from e
 
         if not raw:
-            return {}
+            return SessionMetadata()
 
         try:
-            metadata: dict = json.loads(raw)
+            data = json.loads(raw)
+            metadata = SessionMetadata(**data)
         except json.JSONDecodeError as e:
             logger.error(
                 "redis_adapter.get_metadata.deserialize_failed",
@@ -207,7 +207,7 @@ class RedisSessionAdapter(SessionStorePort):
             if needs_persist:
                 await self._redis.set(
                     self._meta_key(session_id),
-                    json.dumps(metadata),
+                    metadata.model_dump_json(),
                     ex=self._ttl,
                 )
         except RedisError as e:
@@ -234,11 +234,11 @@ class RedisSessionAdapter(SessionStorePort):
         )
         return metadata
 
-    async def save_metadata(self, session_id: str, metadata: dict) -> None:
+    async def save_metadata(self, session_id: str, metadata: SessionMetadata) -> None:
         try:
             await self._redis.set(
                 self._meta_key(session_id),
-                json.dumps(metadata),
+                metadata.model_dump_json(),
                 ex=self._ttl,
             )
             logger.debug(

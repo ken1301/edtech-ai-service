@@ -2,7 +2,7 @@ from application.stateless_services.prompt_builder import PromptBuilder
 from application.stateless_services.llm_manager import LLMManager
 
 from domain.models.lesson2_models.decide import DecideInput, DecideOutput, ResponseDirective
-from domain.models.lesson2_models.metadata import Lesson2LayerUsage
+from domain.models.lesson2_models.decide import Lesson2LayerUsage
 
 class DecideLayer:
     """Layer responsible for making the final decision on how to respond to the user's message, based on the output from the previous layers and any additional processing or rules that may be necessary."""

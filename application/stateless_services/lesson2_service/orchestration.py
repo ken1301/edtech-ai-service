@@ -4,11 +4,11 @@ from application.stateless_services.lesson2_service.full_pipeline import FullPip
 from application.stateless_services.lesson2_service.fast_path_reply import FastPathReply
 from application.stateless_services.lesson2_service.safety_divert import SafetyDivert
 
-from domain.models.lesson2_models.metadata import SessionMetadata
+from domain.models.lesson2_models.meta import SessionMetadata
 from domain.models.lesson2_models.classify import ClassifyOutput
 from domain.models.lesson2_models.ground import GroundOutput
 
-from domain.models.message import Message
+from domain.models.overall_models.message import Message
 
 class Orchestration:
     """Class responsible for orchestrating the overall flow of processing a user's message, including invoking the appropriate layers (e.g., classification, grounding, evaluation, decision-making, response generation, state writing) and handling any necessary branching or special cases (e.g., fast-path replies, safety diverting, etc.)."""

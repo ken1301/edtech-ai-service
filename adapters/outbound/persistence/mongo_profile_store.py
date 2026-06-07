@@ -4,12 +4,14 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import PyMongoError
 
 from domain.ports.profile_store_port import ProfileStorePort
-from domain.models.profile import (
+from domain.models.overall_models.profile import (
     StudentProfile,
     TopicMastery,
     StudentPreference,
-    Subject,
+    LearningDetail
 )
+from domain.models.overall_models.curriculum import Subject, Topic, Concept
+
 from domain.exceptions import ProfileStoreError
 
 from infrastructure.logging import logger
@@ -108,9 +110,10 @@ class MongoProfileAdapter(ProfileStorePort):
         self,
         user_id: str,
         subject: Subject,
-        topic: str,
+        topic: Topic,
+        concept: Concept,
         student_preference: StudentPreference,
-        topic_mastery: TopicMastery,
+        learning_detail: LearningDetail
     ) -> None:
         """
         Upsert a student profile.
@@ -122,7 +125,7 @@ class MongoProfileAdapter(ProfileStorePort):
 
         update = {
             "$set": {
-                f"knowledge_map.{subject.value}.{topic}": topic_mastery.model_dump(),
+                f"knowledge_map.{subject.value}.{topic.value}.{concept.value}": learning_detail.model_dump(),
                 "preferences": student_preference.model_dump(),
                 "updated_at":  now,
             },
@@ -142,6 +145,9 @@ class MongoProfileAdapter(ProfileStorePort):
                 "mongo_profile_store.update_student_profile.completed",
                 log_type="debug",
                 user_id=user_id,
+                subject=subject.value,
+                topic=topic.value,
+                concept=concept.value,
             )
         except PyMongoError as e:
             logger.error(
@@ -149,7 +155,8 @@ class MongoProfileAdapter(ProfileStorePort):
                 log_type="technical",
                 user_id=user_id,
                 subject=subject.value,
-                topic=topic,
+                topic=topic.value,
+                concept=concept.value,
                 error=str(e),
             )
             raise ProfileStoreError(
@@ -161,7 +168,8 @@ class MongoProfileAdapter(ProfileStorePort):
                 log_type="technical",
                 user_id=user_id,
                 subject=subject.value,
-                topic=topic,
+                topic=topic.value,
+                concept=concept.value,
                 error=str(e),
             )
             raise ProfileStoreError("An unexpected error occurred while updating a student profile.") from e

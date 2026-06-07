@@ -4,8 +4,9 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import PyMongoError
 
 from domain.ports.session_store_port import SessionStorePort
-from domain.models.message import Message, Role
-from domain.models.curriculum import Subject
+from domain.models.overall_models.message import Message
+from domain.models.overall_models.common import Role
+from domain.models.overall_models.curriculum import Subject, Topic, Concept
 from domain.exceptions import SessionStoreError
 
 from infrastructure.logging import logger
@@ -66,7 +67,8 @@ class MongoSessionAdapter(SessionStorePort):
         session_id: str,
         messages: list[Message],
         subject: Subject,
-        topic: str,
+        topic: Topic,
+        concept: Concept,
     ) -> None:
         """Persist a batch of messages to MongoDB (called during compression or session close)."""
         if not messages:
@@ -76,7 +78,8 @@ class MongoSessionAdapter(SessionStorePort):
                 session_id=session_id,
                 user_id=user_id,
                 subject=subject.value,
-                topic=topic,
+                topic=topic.value,
+                concept=concept.value,
             )
             return
 
@@ -84,7 +87,8 @@ class MongoSessionAdapter(SessionStorePort):
             "session_id": session_id,
             "user_id": user_id,
             "subject":    subject.value,
-            "topic":      topic,
+            "topic":      topic.value,
+            "concept":    concept.value,
             "messages":   [self._serialize_message(m) for m in messages],
             "created_at": datetime.now(timezone.utc),
         }
@@ -97,7 +101,8 @@ class MongoSessionAdapter(SessionStorePort):
                 session_id=session_id,
                 user_id=user_id,
                 subject=subject.value,
-                topic=topic,
+                topic=topic.value,
+                concept=concept.value,
                 message_count=len(messages),
             )
         except PyMongoError as e:
@@ -107,7 +112,8 @@ class MongoSessionAdapter(SessionStorePort):
                 session_id=session_id,
                 user_id=user_id,
                 subject=subject.value,
-                topic=topic,
+                topic=topic.value,
+                concept=concept.value,
                 message_count=len(messages),
                 error=str(e),
             )
@@ -121,7 +127,8 @@ class MongoSessionAdapter(SessionStorePort):
                 session_id=session_id,
                 user_id=user_id,
                 subject=subject.value,
-                topic=topic,
+                topic=topic.value,
+                concept=concept.value,
                 message_count=len(messages),
                 error=str(e),
             )

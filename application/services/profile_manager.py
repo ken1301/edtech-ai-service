@@ -1,7 +1,7 @@
 from domain.ports.profile_store_port import ProfileStorePort
 
-from domain.models.curriculum import Subject
-from domain.models.profile import TopicMastery, StudentPreference, StudentProfile
+from domain.models.overall_models.curriculum import Subject, Topic, Concept
+from domain.models.overall_models.profile import StudentPreference, StudentProfile, LearningDetail
 
 from domain.exceptions import ProfileManagerError, ProfileStoreError
 
@@ -44,9 +44,10 @@ class ProfileManager:
         self,
         user_id: str,
         subject: Subject,
-        topic: str,
+        topic: Topic,
+        concept: Concept,
         student_preference: StudentPreference,
-        topic_mastery: TopicMastery
+        learning_detail: LearningDetail
     ):
         """Update the student profile in the profile store (MongoDB) with the new preference and knowledge map."""
         try:
@@ -54,8 +55,9 @@ class ProfileManager:
                 user_id=user_id,
                 subject=subject,
                 topic=topic,
+                concept=concept,
                 student_preference=student_preference,
-                topic_mastery=topic_mastery
+                learning_detail=learning_detail
             )
             
             logger.info(
@@ -74,6 +76,7 @@ class ProfileManager:
                 user_id=user_id,
                 subject=subject,
                 topic=topic,
+                concept=concept,
                 error=str(e),
                 exc_info=True,
             )

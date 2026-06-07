@@ -3,7 +3,7 @@ from application.stateless_services.lesson2_service.layers.state_writer_layer im
 from application.stateless_services.lesson2_service.safety_divert import SafetyDivert
 
 from domain.models.lesson2_models.classify import ClassifyOutput
-from domain.models.lesson2_models.metadata import SessionMetadata
+from domain.models.lesson2_models.meta import SessionMetadata
 
 class FastPathReply:
     """Class responsible for generating a fast-path reply to the user, bypassing the more complex processing of the other layers when certain conditions are met (e.g., when the user's message is a simple greeting or farewell)."""

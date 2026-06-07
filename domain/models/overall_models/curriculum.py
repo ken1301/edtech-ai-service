@@ -185,4 +185,3 @@ class Curriculum:
         if not isinstance(topic, Topic):
             raise TypeError(f"Expected Topic, got {type(topic).__name__!r}.")
         return [c for c in Concept if c.topic is topic]
-

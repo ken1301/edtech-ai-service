@@ -5,9 +5,10 @@ from application.services.session_manager import SessionManager
 from application.stateless_services.prompt_builder import PromptBuilder
 from application.services.profile_manager import ProfileManager
 
-from domain.models.curriculum import Subject
-from domain.models.message import ConversationContext
-from domain.models.session import SessionSummary
+from domain.models.overall_models.curriculum import Subject, Topic, Concept
+from domain.models.lesson2_models.meta import SessionMetadata
+from domain.models.overall_models.message import ConversationContext
+from domain.models.overall_models.profile import SessionSummary
 
 from infrastructure.logging import logger
 
@@ -46,8 +47,9 @@ class LearningService:
         user_id: str,
         session_id: str,
         subject: Subject,
-        topic: str,
-        metadata: Dict[str, Any],
+        topic: Topic,
+        concept: Concept,
+        metadata: SessionMetadata,
     ):
         """Background task to sync session data, summarize session, and perform any necessary cleanup when a session expires."""
         
@@ -60,6 +62,7 @@ class LearningService:
                 messages=history,
                 subject=subject,
                 topic=topic,
+                concept=concept
             )
 
             # 2. Generate session summary using LLM  
@@ -79,6 +82,7 @@ class LearningService:
                 user_id=user_id,
                 subject=subject,
                 topic=topic,
+                concept=concept,
                 student_preference=student_preference,
                 topic_mastery=topic_mastery
             )
@@ -110,10 +114,10 @@ class LearningService:
     async def compress_session_history(
         self,
         session_id: str,
-        metadata: Dict[str, Any],
+        metadata: SessionMetadata,
         MSG_TO_COMPRESS: int,
         TURN_TO_COMPRESS: int,
-    ) -> Dict[str, Any]:
+    ) -> SessionMetadata:
         """Compress the session history in Redis by summarizing older messages using the LLM."""
         try:
             # 1. Get the MSG_TO_COMPRESS oldest messages from Redis

@@ -7,7 +7,7 @@ from application.services.profile_manager import ProfileManager
 from application.stateless_services.docs_transform import PDFToMarkdownTransformer
 from application.stateless_services.adaptive_learning_service import AdaptiveLearningService
 
-from domain.models.exercise import Exercise, ExerciseForPurpose
+from domain.models.lesson2_models.exercise import Exercise, Lesson2Exercises
 
 from domain.exceptions import (
     LLMManagerError,
@@ -47,7 +47,7 @@ class ExerciseSelectionUseCase:
         self, 
         user_id: str,
         document_url: str
-    ) -> ExerciseForPurpose:
+    ) -> Lesson2Exercises:
         """Main method to execute the exercise selection process based on the provided PDF document URL."""
 
         try:

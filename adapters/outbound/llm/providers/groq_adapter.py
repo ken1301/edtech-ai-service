@@ -7,11 +7,11 @@ from typing import List, Optional
 
 from domain.exceptions import LLMAdapterError
 from domain.ports.llm_port import LLMPort
-from domain.models.message import Message, ConversationContext
-from domain.models.response import LLMResponse, TokenUsage
+
+from domain.models.overall_models.message import Message, ConversationContext
+from domain.models.overall_models.response import LLMResponse, TokenUsage
 
 from infrastructure.logging import logger
-
 
 class GroqAdapter(LLMPort):
     """

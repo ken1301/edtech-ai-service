@@ -1,12 +1,7 @@
 from abc import ABC, abstractmethod
 
-from domain.models.profile import (
-    StudentProfile,
-    TopicMastery,
-    StudentPreference,
-    Subject,
-)
-
+from domain.models.overall_models.profile import StudentPreference, LearningDetail, StudentProfile
+from domain.models.overall_models.curriculum import Subject, Topic, Concept
 
 class ProfileStorePort(ABC):
     """
@@ -27,9 +22,10 @@ class ProfileStorePort(ABC):
         self,
         user_id: str,
         subject: Subject,
-        topic: str,
+        topic: Topic,
+        concept: Concept,
         student_preference: StudentPreference,
-        topic_mastery: TopicMastery,
+        learning_detail: LearningDetail
     ) -> None:
         """
         Upsert the student profile with updated preference and topic mastery.

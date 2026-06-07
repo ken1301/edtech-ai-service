@@ -18,4 +18,3 @@ class MarkdownDocument(BaseModel):
     filename: str  
     content: str  
     parent_pdf_id: Optional[str]
-

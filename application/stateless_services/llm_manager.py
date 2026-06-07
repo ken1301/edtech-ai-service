@@ -3,8 +3,8 @@ from pydantic import BaseModel
 
 from domain.ports.llm_port import LLMPort
 
-from domain.models.response import LLMResponse
-from domain.models.message import Message, ConversationContext
+from domain.models.overall_models.response import LLMResponse
+from domain.models.overall_models.message import Message, ConversationContext
 
 from infrastructure.logging import logger
 

@@ -7,7 +7,7 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from domain.ports.cloud_port import CloudPort
-from domain.models.document import PDFDocument, ImageDocument
+from domain.models.overall_models.document import PDFDocument, ImageDocument
 
 from domain.exceptions import CloudAdapterError
 

@@ -1,9 +1,9 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional, Any, Tuple
+from typing import List, Dict, Optional, Any
 from datetime import datetime, timezone
 
-from domain.models.curriculum import Subject, Topic, Concept
-from domain.models.standard import (
+from domain.models.overall_models.curriculum import Subject, Topic, Concept
+from domain.models.overall_models.common import (
     ConceptType,
     BloomLevel,
     ProblemRole,
@@ -15,19 +15,20 @@ from domain.models.standard import (
     StudentStrength,
     StudentWeakness
 )
-from domain.models.exercise import Pattern
+
 
 class StudentPattern(BaseModel):
     cognitive_operation: List[CognitiveOperation] = []
     representation: List[Representation] = []
 
-class Perfermance(BaseModel):
+
+class Performance(BaseModel):
     score: float
     bloom_level: BloomLevel
     strengths: List[ApproachStrength]
     weaknesses: List[ApproachWeakness]
-    pattern: StudentPattern 
-    # Pattern mà học sinh đã áp dụng trong bài tập, nó khác với pattern của bài tập
+    pattern: StudentPattern
+
 
 class LearningDetail(BaseModel):
     avg_score: float
@@ -36,22 +37,25 @@ class LearningDetail(BaseModel):
     mastering_at: List[ConceptType] = []
     struggling_at: List[ConceptType] = []
 
-    finished_exercise: Dict[ProblemRole, Perfermance] = {}
+    finished_exercise: Dict[ProblemRole, Performance] = {}
+
 
 class LearningStyle(BaseModel):
     cognitive_operation: List[CognitiveOperation] = []
     representation: List[Representation] = []
 
+
 class StudentPreference(BaseModel):
     summary: Optional[str] = None
-    strengths: List[StudentStrength] = []  # Điểm mạnh của học sinh
-    weaknesses: List[StudentWeakness] = []  # Điểm yếu của học sinh
-    learning_style: Optional[LearningStyle] = None  # Phong cách học tập
-    preferred_difficulty: Optional[DifficultyLevel] = None  # Mức độ khó ưa thích
-    other_preferences: Dict[str, Any] = Field(default_factory=dict)  # Các sở thích khác (ví dụ: thời gian học, loại bài tập yêu thích, v.v.)
+    strengths: List[StudentStrength] = []
+    weaknesses: List[StudentWeakness] = []
+    learning_style: Optional[LearningStyle] = None
+    preferred_difficulty: Optional[DifficultyLevel] = None
+    other_preferences: Dict[str, Any] = Field(default_factory=dict)
+
 
 class StudentProfile(BaseModel):
-    user_id: str = Field(..., alias="_id") 
+    user_id: str = Field(..., alias="_id")
     full_name: str
     grade: int
 
@@ -69,18 +73,13 @@ class StudentProfile(BaseModel):
 class SessionSummary(BaseModel):
     """To summarize chat session history, using this to update student profile"""
 
-    # --- Student preferences ---
     summary: str
     strengths: List[StudentStrength]
     weaknesses: List[StudentWeakness]
     learning_style: Optional[LearningStyle] = None
     preferred_difficulty: Optional[DifficultyLevel] = None
 
-    # --- Knowledge map ---
     mastering_at: List[ConceptType] = []
     struggling_at: List[ConceptType] = []
 
-    finished_exercise: Dict[ProblemRole, Perfermance] = {}
-
-    
-
+    finished_exercise: Dict[ProblemRole, Performance] = {}

@@ -1,5 +1,5 @@
 from domain.ports.exercise_store_port import ExerciseStorePort
-from domain.models.exercise import Exercise
+from domain.models.lesson2_models.exercise import Exercise
 
 from domain.exceptions import ExerciseManagerError, ExerciseStoreError
 

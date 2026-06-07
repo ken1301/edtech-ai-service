@@ -1,7 +1,7 @@
 from domain.ports.session_store_port import SessionStorePort
 
-from domain.models.message import Message
-from domain.models.curriculum import Subject
+from domain.models.overall_models.message import Message
+from domain.models.overall_models.curriculum import Subject, Topic, Concept
 from infrastructure.logging import logger   
 
 from domain.exceptions import SessionManagerError, SessionStoreError
@@ -209,7 +209,8 @@ class SessionManager:
         session_id: str,
         messages: list[Message],
         subject: Subject,
-        topic: str,
+        topic: Topic,
+        concept: Concept
     ):
         """Save the messages when compressing session history"""
 
@@ -220,6 +221,7 @@ class SessionManager:
                 messages=messages,
                 subject=subject,
                 topic=topic,
+                concept=concept
             )
 
             logger.info(
@@ -236,6 +238,9 @@ class SessionManager:
                 "session_manager.mongo_save_messages.unexpected.failed",
                 log_type="technical",
                 session_id=session_id,
+                subject=subject,
+                topic=topic,
+                concept=concept,
                 error=str(e),
                 exc_info=True,
             )

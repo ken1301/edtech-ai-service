@@ -1,31 +1,44 @@
-from enum import Enum
-from pydantic import BaseModel
-from typing import List, Optional, Literal
+from typing import List, Literal, Optional
+from pydantic import BaseModel, Field
+
+from domain.models.overall_models.common import ProblemRole
+from domain.models.lesson2_models.common import Phase, ResponseClass
+from domain.models.lesson2_models.evaluate import AffectiveState
+
+
+class ToneArbiterOutput(BaseModel):
+    tone: Literal["peer", "peer_soft", "empathetic", "firm"]
+    depth: Literal["one_line", "short", "medium"]
+    must_not_reveal: List[str] = Field(default_factory=list)
+
+
+DecideOutput = ToneArbiterOutput
+
 
 class DecideInput(BaseModel):
-    pass
+    response_class: ResponseClass
+    phase: Phase
+    problem_role: ProblemRole
+    affective: AffectiveState
+    attempts_on_current_approach: int
+    max_attempts_per_approach: int
+    approaches_tried: int
+    max_approached_per_problem: int
+    critical_false_positive: bool = False
 
-class ResponseClass(str, Enum):
-    CONFIRM              = "confirm"
-    SURFACE_WEAKNESS     = "surface_weakness"
-    COUNTER_PERSPECTIVE  = "counter_perspective"   # bot disagrees as a peer
-    GUIDE_DISCOVERY      = "guide_discovery"       # Socratic
-    SOFT_INTERVENTION    = "soft_intervention"     # attempt-4 hint
-    REDIRECT_TO_PROBLEM  = "redirect_to_problem"
-    ADVANCE              = "advance"
-    WRAP_UP              = "wrap_up"
-    EMPATHY              = "empathy"
-    REFUSE_ANSWER_REQ    = "refuse_answer_request"
-    META_REPLY           = "meta_reply"            # UI/lesson question
-    SAFETY_HANDOFF       = "safety_handoff"
+
+ToneDecideInput = DecideInput
+
 
 class ResponseDirective(BaseModel):
     response_class: ResponseClass
-    
-class DecideOutput(BaseModel):
-    directive: ResponseDirective
-    advance_to_problem: Optional[int]
-    tone: Literal["peer","peer_soft","empathetic","firm"]
-    depth: Literal["one_line","short","medium"]
-    must_not_reveal: List[str]  # final_answer hash, key step ids
-    rationale: str
+    tone: Literal["peer", "peer_soft", "empathetic", "firm"]
+    depth: Literal["one_line", "short", "medium"]
+    must_not_reveal: List[str] = Field(default_factory=list)
+    advance: bool = False
+    advance_after_ack: bool = False
+    critical_false_positive: bool = False
+    offer_skip: bool = False
+    references_problem_id: Optional[int] = None
+    target_phase_to_probe: Optional[Phase] = None
+    farming_callout: bool = False

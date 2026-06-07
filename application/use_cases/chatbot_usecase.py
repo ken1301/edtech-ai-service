@@ -2,9 +2,10 @@ from fastapi import BackgroundTasks
 
 from typing import List, Dict, Any, Tuple
 
-from domain.models.curriculum import Subject
-from domain.models.message import Message, Role
-from domain.models.response import ChatResponse
+from domain.models.overall_models.curriculum import Subject, Topic, Concept
+from domain.models.overall_models.message import Message
+from domain.models.overall_models.common import Role
+from domain.models.overall_models.response import ChatResponse
 
 from application.stateless_services.llm_manager import LLMManager
 from application.services.session_manager import SessionManager

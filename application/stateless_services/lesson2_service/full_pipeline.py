@@ -3,7 +3,7 @@ from application.stateless_services.lesson2_service.layers.decide_layer import D
 from application.stateless_services.lesson2_service.layers.response_layer import ResponseLayer
 from application.stateless_services.lesson2_service.layers.state_writer_layer import StateWriterLayer
 
-from domain.models.lesson2_models.metadata import SessionMetadata
+from domain.models.lesson2_models.meta import SessionMetadata
 from domain.models.lesson2_models.classify import ClassifyOutput
 from domain.models.lesson2_models.ground import GroundOutput
 

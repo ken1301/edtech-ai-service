@@ -1,9 +1,9 @@
 from pydantic import BaseModel
 from abc import ABC, abstractmethod
 from typing import List, Optional
-from domain.models.message import Message, ConversationContext
-from domain.models.response import LLMResponse
 
+from domain.models.overall_models.message import Message, ConversationContext
+from domain.models.overall_models.response import LLMResponse
 
 class LLMPort(ABC):
     """Abstract port for LLM providers"""

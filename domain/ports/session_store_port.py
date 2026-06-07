@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 
-from domain.models.message import Message
-from domain.models.curriculum import Subject
+from domain.models.overall_models.message import Message
+from domain.models.overall_models.curriculum import Subject
+from domain.models.lesson2_models.meta import SessionMetadata
 
 class SessionStorePort(ABC):
     """
@@ -18,19 +19,19 @@ class SessionStorePort(ABC):
     # ── Redis operations ──────────────────────────────────────────────────────
 
     @abstractmethod
-    async def get_metadata(self, session_id: str) -> dict:
+    async def get_metadata(self, session_id: str) -> SessionMetadata:
         """
-        Return session metadata dict for the given session.
+        Return session metadata for the given session.
 
         Side-effect (Redis adapter only): if `created_at` shows the session has
         exceeded the configured timeout, `is_active` is flipped to False,
         `closed_at` is stamped, and the change is persisted before returning.
-        Returns an empty dict when the session is not found.
+        Returns an empty SessionMetadata when the session is not found.
         """
 
     @abstractmethod
-    async def save_metadata(self, session_id: str, metadata: dict) -> None:
-        """Persist the metadata dict for the given session."""
+    async def save_metadata(self, session_id: str, metadata: SessionMetadata) -> None:
+        """Persist the metadata for the given session."""
 
     @abstractmethod
     async def save_turn(
