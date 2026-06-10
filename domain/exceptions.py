@@ -34,6 +34,19 @@ class CloudManagerError(Exception):
     """Raised when there is an error in cloud management operations."""
     pass
 
+# === Lesson 2 specific exceptions ===
+class Lesson2OrchestrationError(Exception):
+    """Raised when there is an error in the orchestration of the lesson 2 service."""
+    pass
+
+class Lesson2PipelineError(Exception):
+    """Raised when there is an error in the overall pipeline of the lesson 2 service."""
+    pass
+
+class Lesson2LayerError(Exception):
+    """Raised when there is an error in one of the layers of the lesson 2 service."""
+    pass
+
 # === Exercise-related exceptions ===
 class ExerciseStoreError(Exception):
     """Raised when there is an error interacting with the exercise store."""
@@ -42,7 +55,6 @@ class ExerciseStoreError(Exception):
 class ExerciseManagerError(Exception):
     """Raised when there is an error in exercise management operations."""
     pass    
-
 
 # === Other activity-specific exceptions ===
 class AuthorizationError(Exception):
