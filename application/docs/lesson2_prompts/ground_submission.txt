@@ -17,6 +17,7 @@ You do not produce content for the student. You return strict JSON.
 <task>
 Produce the approach verdict — exactly one of:
 
+NOT_AN_ANSWER — the submission is garbage, empty, unrelated to the problem, or contains no recoverable reasoning or attempt. Check this FIRST; if it applies, stop and return it.
 CORRECT — the student's reasoning matches a valid approach (either an item in approach_list, or, if open_approach=true, a valid novel approach), AND no documented weakness from that approach is triggered by this specific problem instance.
 
 WEAK — the student's reasoning matches a valid approach, but a documented weakness from approach.weaknesses applies to this problem instance. Reasoning is sound within constraints, but doesn't generalize to the case at hand or to closely related cases. Examples:
@@ -48,7 +49,7 @@ Defensive interpretation of result_status:
 Strict JSON.
 
 {
-  "approach_verdict": "CORRECT" | "WEAK" | "INCORRECT",
+  "approach_verdict": "CORRECT" | "WEAK" | "INCORRECT" | "NOT_AN_ANSWER",
   "matched_approach_id": int | null,
   "matched_weakness": string | null,
   "judge_confidence": 0.0,
@@ -59,6 +60,7 @@ Strict JSON.
 <what_this_prompt_must_never_do>
 - Never reveal or paraphrase problem_final_answer in any output field.
 - Never produce text intended for the student.
+- Never return NOT_AN_ANSWER for a genuine but wrong attempt.
 - Never set approach_verdict=CORRECT when matched_weakness is non-null.
 - Never set matched_approach_id to a value that is not in approach_list when open_approach=false.
 - Never lower-case the verdict; use the exact enum literals.

@@ -30,6 +30,9 @@ class PromptBuilder:
     SUMMARIZE_SESSION_PROMPT = (_LEGACY_PROMPT_TEMPLATE_DIR / "summarize_session_prompt.txt").read_text(encoding="utf-8")
     EXERCISE_EXTRACTION_PROMPT = (_LEGACY_PROMPT_TEMPLATE_DIR / "exercise_extraction_prompt.txt").read_text(encoding="utf-8")
 
+    LESSON2_COMPRESS_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "compress.txt").read_text(encoding="utf-8")
+    LESSON2_SUMMARIZE_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "summarize.txt").read_text(encoding="utf-8")
+
     LESSON2_CLASSIFY_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "classify.txt").read_text(encoding="utf-8")
     LESSON2_GROUND_SUBMISSION_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "ground_submission.txt").read_text(encoding="utf-8")
     LESSON2_EVALUATE_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "evaluate.txt").read_text(encoding="utf-8")
@@ -39,6 +42,7 @@ class PromptBuilder:
     LESSON2_RESPOND_PHASE_D_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "respond_phase_d.txt").read_text(encoding="utf-8")
     LESSON2_RESPOND_PHASE_E_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "respond_phase_e.txt").read_text(encoding="utf-8")
     LESSON2_RESPOND_PHASE_O_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "respond_phase_o.txt").read_text(encoding="utf-8")
+    LESSON2_RESPOND_WRAP_UP_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "respond_wrap_up.txt").read_text(encoding="utf-8")
 
     def __init__(self, profile_store: ProfileStorePort):
         self._profile_store = profile_store
@@ -62,6 +66,27 @@ class PromptBuilder:
 
         return str(value)
 
+    @classmethod
+    def _resolve_context_value(cls, context: Mapping[str, Any], key: str) -> Any:
+        if key in context:
+            return context[key]
+
+        current: Any = context
+        for part in key.split("."):
+            if isinstance(current, Mapping):
+                if part not in current:
+                    return None
+                current = current[part]
+                continue
+
+            if hasattr(current, part):
+                current = getattr(current, part)
+                continue
+
+            return None
+
+        return current
+
     @staticmethod
     def _json_default(value: Any) -> Any:
         if hasattr(value, "value"):
@@ -74,140 +99,112 @@ class PromptBuilder:
     def _render_template(cls, template: str, **context: Any) -> str:
         def replace(match: re.Match[str]) -> str:
             key = match.group(1).strip()
-            if key not in context:
+            value = cls._resolve_context_value(context, key)
+            if value is None and key not in context:
                 return match.group(0)
-            return cls._serialize_value(context[key])
+            return cls._serialize_value(value)
 
         return re.sub(r"\{\{\s*([a-zA-Z0-9_\.]+)\s*\}\}", replace, template)
 
-    @staticmethod
-    def _get_student_context(
-        student_profile: StudentProfile, 
-        user_id: str, 
-        subject: Subject,
-        topic: Topic,
-        concept: Concept
-    ) -> str:
-        try:
-            if not student_profile:
-                logger.warning(
-                    "prompt_builder.get_student_context.no_profile",
-                    log_type="business",
-                    user_id=user_id,
-                )
-                return (
-                    "This student does not have a profile yet. No information about their mastery level, misconceptions, or preferences is available.\n"
-                    f"Basic information: The student is learning {subject.value}, {topic.value}, {concept.value}."
-                )
-
-            subject_knowledge = student_profile.knowledge_map.get(subject.value, {})
-            other_subjects = {key: value for key, value in student_profile.knowledge_map.items() if key != subject.value}
-
-            return (
-                f"Student name: {student_profile.full_name or 'Unknown'}, lớp {student_profile.grade or 'N/A'}.\n"
-                f"Personal information: {student_profile.preferences or {}}.\n"
-                f"Current topic: {subject.value} - {topic.value} - {concept.value}.\n"
-                f"Knowledge about {subject.value}: {subject_knowledge}.\n"
-                f"Knowledge about other subjects: {other_subjects}.\n"
-            )
-
-        except Exception as exc:
-            logger.error(
-                "prompt_builder.get_student_context.failed",
-                log_type="technical",
-                user_id=user_id,
-                subject=subject.value,
-                topic=topic.value,
-                concept=concept.value,
-                error=str(exc),
-                exc_info=True,
-            )
-            raise PromptGenerationError("Failed to get student context for prompt generation.") from exc
-
-    async def chatbot_system_prompt(self, user_id: str, subject: Subject, topic: Topic, concept: Concept) -> str:
-        try:
-            student_profile = await self._profile_store.get_student_profile(user_id)
-            system_prompt = self._get_student_context(student_profile, user_id, subject, topic, concept)
-            system_prompt += "\n\n" + self.THINKING_PROMPT + "\n\n" + self.ANSWERING_PROMPT
-
-            logger.info(
-                "prompt_builder.chatbot_system_prompt.completed",
-                log_type="business",
-                user_id=user_id,
-                subject=subject.value,
-                topic=topic.value,
-                concept=concept.value,
-            )
-            return system_prompt
-
-        except ProfileStoreError as exc:
-            raise PromptGenerationError("Failed to generate chatbot system prompt.") from exc
-        except Exception as exc:
-            logger.error(
-                "prompt_builder.chatbot_system_prompt.unexpected.failed",
-                log_type="technical",
-                user_id=user_id,
-                subject=subject.value,
-                topic=topic.value,
-                concept=concept.value,
-                error=str(exc),
-                exc_info=True,
-            )
-            raise PromptGenerationError("Unexpected error during chatbot system prompt generation.") from exc
-
-    async def summarize_session_prompt(self) -> str:
-        try:
-            logger.info("prompt_builder.summarize_session_prompt.completed", log_type="business")
-            return self.SUMMARIZE_SESSION_PROMPT
-        except Exception as exc:
-            logger.error(
-                "prompt_builder.summarize_session_prompt.failed",
-                log_type="technical",
-                error=str(exc),
-                exc_info=True,
-            )
-            raise PromptGenerationError("Failed to generate summarize session prompt.") from exc
-
-    async def compress_history_prompt(self) -> str:
-        try:
-            logger.info("prompt_builder.compress_history_prompt.completed", log_type="business")
-            return self.COMPRESS_CONTEXT_PROMPT
-        except Exception as exc:
-            logger.error(
-                "prompt_builder.compress_history_prompt.failed",
-                log_type="technical",
-                error=str(exc),
-                exc_info=True,
-            )
-            raise PromptGenerationError("Failed to generate compress history prompt.") from exc
-
-    async def exercise_extraction_prompt(self) -> str:
-        try:
-            logger.info("prompt_builder.exercise_extraction_prompt.completed", log_type="business")
-            return self.EXERCISE_EXTRACTION_PROMPT
-        except Exception as exc:
-            logger.error(
-                "prompt_builder.exercise_extraction_prompt.failed",
-                log_type="technical",
-                error=str(exc),
-                exc_info=True,
-            )
-            raise PromptGenerationError("Failed to generate exercise extraction prompt.") from exc
-
     async def lesson2_classify_prompt(self, **context: Any) -> str:
-        return self._render_template(self.LESSON2_CLASSIFY_PROMPT, **context)
+        try:
+            return self._render_template(self.LESSON2_CLASSIFY_PROMPT, **context)
+        except (ValueError, TypeError) as e:
+            logger.error(
+                "prompt_builder.classify_prompt.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate classify prompt.") from e
+        except Exception as e:
+            logger.error(
+                "prompt_builder.classify_prompt.unexpected.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate classify prompt.") from e
 
     async def lesson2_ground_submission_prompt(self, **context: Any) -> str:
-        return self._render_template(self.LESSON2_GROUND_SUBMISSION_PROMPT, **context)
+        try:
+            return self._render_template(self.LESSON2_GROUND_SUBMISSION_PROMPT, **context)
+        except (ValueError, TypeError) as e:
+            logger.error(
+                "prompt_builder.ground_submission_prompt.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate ground submission prompt.") from e
+        except Exception as e:
+            logger.error(
+                "prompt_builder.ground_submission_prompt.unexpected.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate ground submission prompt.") from e
 
     async def lesson2_evaluate_prompt(self, **context: Any) -> str:
-        return self._render_template(self.LESSON2_EVALUATE_PROMPT, **context)
+        try:
+            return self._render_template(self.LESSON2_EVALUATE_PROMPT, **context)
+        except (ValueError, TypeError) as e:
+            logger.error(
+                "prompt_builder.evaluate_prompt.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate evaluate prompt.") from e
+        except Exception as e:
+            logger.error(
+                "prompt_builder.evaluate_prompt.unexpected.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate evaluate prompt.") from e
 
     async def lesson2_decide_prompt(self, **context: Any) -> str:
-        return self._render_template(self.LESSON2_DECIDE_PROMPT, **context)
+        try:
+            return self._render_template(self.LESSON2_DECIDE_PROMPT, **context)
+        except (ValueError, TypeError) as e:
+            logger.error(
+                "prompt_builder.decide_prompt.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate decide prompt.") from e
+        except Exception as e:
+            logger.error(
+                "prompt_builder.decide_prompt.unexpected.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate decide prompt.") from e
 
     async def lesson2_non_learning_response_prompt(self, **context: Any) -> str:
-        return self._render_template(self.LESSON2_RESPOND_NON_LEARNING_PROMPT, **context)
+        try:
+            return self._render_template(self.LESSON2_RESPOND_NON_LEARNING_PROMPT, **context)
+        except (ValueError, TypeError) as e:
+            logger.error(
+                "prompt_builder.non_learning_response_prompt.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate non-learning response prompt.") from e
+        except Exception as e:
+            logger.error(
+                "prompt_builder.non_learning_response_prompt.unexpected.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate non-learning response prompt.") from e
 
     async def lesson2_response_prompt(self, phase: Phase, **context: Any) -> str:
         phase_key = phase.value if isinstance(phase, Phase) else str(phase)
@@ -222,4 +219,84 @@ class PromptBuilder:
         else:
             raise PromptGenerationError(f"Unsupported lesson2 phase: {phase_key}")
 
-        return self._render_template(template, **context)
+        try:
+            return self._render_template(template, **context)
+        except (ValueError, TypeError) as e:
+            logger.error(
+                "prompt_builder.response_prompt.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate response prompt.") from e
+        except Exception as e:
+            logger.error(
+                "prompt_builder.response_prompt.unexpected.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate response prompt.") from e
+
+
+    async def lesson2_wrap_up_prompt(self, **context: Any) -> str:
+        try:
+            return self._render_template(self.LESSON2_RESPOND_WRAP_UP_PROMPT, **context)
+        except (ValueError, TypeError) as e:
+            logger.error(
+                "prompt_builder.wrap_up_prompt.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate wrap-up prompt.") from e
+        except Exception as e:
+            logger.error(
+                "prompt_builder.wrap_up_prompt.unexpected.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate wrap-up prompt.") from e
+
+    async def lesson2_compress_prompt(self, **context: Any) -> str:
+        try:
+            return self._render_template(self.LESSON2_COMPRESS_PROMPT, **context)
+        except (ValueError, TypeError) as e:
+            logger.error(
+                "prompt_builder.compress_prompt.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate compress prompt.") from e
+        except Exception as e:
+            logger.error(
+                "prompt_builder.compress_prompt.unexpected.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate compress prompt.") from e
+
+    async def lesson2_summarize_prompt(self, **context: Any) -> str:
+        try:
+            return self._render_template(self.LESSON2_SUMMARIZE_PROMPT, **context)
+        except (ValueError, TypeError) as e:
+            logger.error(
+                "prompt_builder.summarize_prompt.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate summarize prompt.") from e
+        except Exception as e:
+            logger.error(
+                "prompt_builder.summarize_prompt.unexpected.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate summarize prompt.") from e
+
+    

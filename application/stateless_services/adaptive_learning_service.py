@@ -327,7 +327,59 @@ class AdaptiveLearningService:
     ) -> Tuple[StudentPreference, LearningDetail]:
         """Cập nhật hồ sơ học sinh dựa trên thông tin mới thu thập được sau khi học sinh hoàn thành bài tập."""
         try:
-            pass
+            now = datetime.now(timezone.utc)
+
+            summary_preferences = StudentPreference(
+                summary=session_summary.summary.strip() if session_summary.summary and session_summary.summary.strip() else None,
+                strengths=session_summary.strengths,
+                weaknesses=session_summary.weaknesses,
+                learning_style=session_summary.learning_style,
+                preferred_difficulty=session_summary.preferred_difficulty,
+            )
+            merged_preferences = self._merge_preferences(student_profile.preferences, summary_preferences)
+
+            finished_exercise = self._clone_model(session_summary.finished_exercise)
+            avg_score = (
+                sum(performance.score for performance in finished_exercise.values()) / len(finished_exercise)
+                if finished_exercise
+                else 0.50
+            )
+
+            mastering_at = self._unique_items([], session_summary.mastering_at)
+            struggling_at = self._unique_items([], session_summary.struggling_at)
+            mastered_markers = {self._enum_key(item) for item in mastering_at}
+            struggling_at = [item for item in struggling_at if self._enum_key(item) not in mastered_markers]
+
+            session_detail = LearningDetail(
+                avg_score=avg_score,
+                last_practiced=now,
+                mastering_at=mastering_at,
+                struggling_at=struggling_at,
+                finished_exercise=finished_exercise,
+            )
+
+            latest_detail = None
+            latest_practiced = None
+            for topics in student_profile.knowledge_map.values():
+                for concepts in topics.values():
+                    for detail in concepts.values():
+                        if latest_detail is None or detail.last_practiced > latest_practiced:
+                            latest_detail = detail
+                            latest_practiced = detail.last_practiced
+
+            merged_learning_detail = (
+                self._merge_learning_detail(latest_detail, session_detail)
+                if latest_detail is not None
+                else session_detail
+            )
+
+            logger.info(
+                "adaptive_learning_service.update_student_profile.completed",
+                log_type="business",
+                student_id=student_profile.user_id,
+            )
+
+            return merged_preferences, merged_learning_detail
         
         except (ValueError, TypeError, Exception) as e:
             logger.error(

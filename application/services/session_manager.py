@@ -2,6 +2,8 @@ from domain.ports.session_store_port import SessionStorePort
 
 from domain.models.overall_models.message import Message
 from domain.models.overall_models.curriculum import Subject, Topic, Concept
+from domain.models.lesson2_models.meta import SessionMetadata
+
 from infrastructure.logging import logger   
 
 from domain.exceptions import SessionManagerError, SessionStoreError
@@ -19,7 +21,7 @@ class SessionManager:
 
     # ================= Redis operations =================
 
-    async def redis_get_metadata(self, session_id: str) -> dict:
+    async def redis_get_metadata(self, session_id: str) -> SessionMetadata:
         """Get session metadata from Redis."""
         try: 
             metadata = await self._redis_store.get_metadata(session_id)
@@ -47,7 +49,7 @@ class SessionManager:
             raise SessionManagerError("Unexpected error while getting session metadata from Redis.") from e
         
 
-    async def redis_save_metadata(self, session_id: str, metadata: dict):
+    async def redis_save_metadata(self, session_id: str, metadata: SessionMetadata):
         """Save session metadata to Redis."""
         try: 
             await self._redis_store.save_metadata(session_id, metadata)
@@ -71,6 +73,32 @@ class SessionManager:
             )
             raise SessionManagerError("Unexpected error while saving session metadata to Redis.") from e
 
+    async def redis_get_all_messages(self, session_id: str) -> list[Message]:
+        """Get the full message history for a session from Redis."""
+        try: 
+            messages = await self._redis_store.get_history_messages(session_id)
+            
+            logger.info(
+                "session_manager.redis_get_all_messages.completed",
+                log_type="business",
+                session_id=session_id,
+            )
+            
+            return messages
+        
+        except SessionStoreError as e:
+            raise SessionManagerError("Failed to get all messages from Redis.") from e
+        
+        except Exception as e:
+            logger.error(
+                "session_manager.redis_get_all_messages.unexpected.failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+                exc_info=True,
+            )
+            raise SessionManagerError("Unexpected error while getting all messages from Redis.") from e
+    
     async def redis_get_right(self, session_id: str, limit: int) -> list[Message]:
         """Get the most recent messages from Redis for the session."""
         try: 

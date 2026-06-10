@@ -30,7 +30,7 @@ Tone rules (apply in order; first match wins):
 Depth rules:
 - one_line: response_class ∈ {CONFIRM (when result correct), META_REPLY (greeting), REFUSE_ANSWER_REQ, REDIRECT_TO_SUBMIT}
 - short:    response_class ∈ {EMPATHY, META_REPLY (off_topic), PROBE_INTERMEDIATE_PHASE, GUIDE_DISCOVERY when phase=PROBLEM}
-- medium:   response_class ∈ {SURFACE_WEAKNESS, COUNTER_PERSPECTIVE, SOFT_INTERVENTION, APPROACH_SWITCH_WARNING, GUIDE_DISCOVERY when phase∈{DONE,EXECUTE,OPTIMIZE}}
+- medium:   response_class ∈ {SURFACE_WEAKNESS, COUNTER_PERSPECTIVE, SOFT_INTERVENTION, APPROACH_SWITCH_WARNING, GUIDE_DISCOVERY when phase∈{DONE,EXECUTE,OPTIMIZE}, WRAP_UP}
 
 must_not_reveal — always include "final_answer". Add others:
 - "named_correct_approach": for any response_class where the bot might be tempted to name a method (GUIDE_DISCOVERY, COUNTER_PERSPECTIVE, APPROACH_SWITCH_WARNING, SOFT_INTERVENTION).

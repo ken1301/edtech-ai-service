@@ -6,7 +6,9 @@ from domain.models.overall_models.curriculum import Subject, Topic, Concept
 from domain.models.overall_models.message import Message
 from domain.models.overall_models.common import Role
 from domain.models.overall_models.response import ChatResponse
+from domain.models.lesson2_models.meta import Lesson2Request, SessionMetadata
 
+from application.stateless_services.lesson2_service.orchestration import Lesson2Orchestration
 from application.stateless_services.llm_manager import LLMManager
 from application.services.session_manager import SessionManager
 from application.stateless_services.prompt_builder import PromptBuilder
@@ -36,49 +38,48 @@ class ChatbotUseCase:
 
     def __init__(
         self, 
-        llm_manager: LLMManager,
         session_manager: SessionManager,
-        prompt_builder: PromptBuilder,
-        learning_service: LearningService
+        learning_service: LearningService,
+        orchestration: Lesson2Orchestration,
     ):  
         # Basic service 
-        self._llm_manager = llm_manager
         self._session_manager = session_manager
-        self._prompt_builder = prompt_builder
 
         # Stateless service
         self._learning_service = learning_service 
 
+        # Lesson 2 specific stateless services
+        self._orchestration = orchestration
+
 
     @staticmethod
-    def _if_valid_data(user_id: str, metadata: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
+    def _if_valid_data(user_id: str, metadata: SessionMetadata):
         # Placeholder for actual validation logic (e.g., check if user exists, session is active, etc.)
         if not metadata: 
             raise AuthorizationError("Session not found.")
-        if metadata.get("user_id") != user_id:
+        if metadata.user_id != user_id:
             raise AuthorizationError("User not authorized for this session.")
         return metadata
-    
 
     async def run(
         self,
         user_id: str,
         session_id: str,
         correlation_id: str,
-        student_message: str,
+        request: Lesson2Request,
         subject: Subject,
+        topic: Topic,
+        concept: Concept,
         background_task: BackgroundTasks,
-        topic: str = "general",
     ):
         """Main pipeline for processing a user message and generating a chatbot response."""
         
         try:
-            # 1. Look for session metadata & 2. Validate session and user data
+            history_msg = await self._session_manager.redis_get_all_messages(session_id)
             metadata = await self._session_manager.redis_get_metadata(session_id)
             self._if_valid_data(user_id, metadata)
 
-            # 3. Check if the session is active
-            is_active = metadata["is_active"]
+            is_active = metadata.is_active
             if not is_active:
                 background_task.add_task(
                     self._learning_service.sync_and_close_session,
@@ -86,6 +87,7 @@ class ChatbotUseCase:
                     session_id=session_id,
                     subject=subject,
                     topic=topic,
+                    concept=concept,
                     metadata=metadata,
                 )
                 # return because if we raise an exception here, FastAPI would not execute the background task
@@ -95,81 +97,46 @@ class ChatbotUseCase:
                     correlation_id=correlation_id,
                 )
 
-            
-            # 4. Find system prompt in session metadata if exists, otherwise create new system prompt then save to metadata
-            system_prompt = metadata.get("system_prompt") if metadata else None
-            if not system_prompt:
-                system_prompt = await self._prompt_builder.chatbot_system_prompt(
-                    user_id=user_id,
-                    subject=subject,
-                    topic=topic,
-                )
-                metadata["system_prompt"] = system_prompt
-                await self._session_manager.redis_save_metadata(session_id, metadata)
-
-            # 5. Compress history messages
-            if metadata.get("turn_count", 0) > self.TURN_THRESHOLD:
+            if metadata.turn_count > self.TURN_THRESHOLD: 
+                MSG_TO_COMPRESS = self.TURN_TO_COMPRESS * self.MSG_PER_TURN
                 metadata = await self._learning_service.compress_session_history(
                     session_id=session_id,
+                    history_msg=history_msg,
                     metadata=metadata,
-                    MSG_TO_COMPRESS=self.TURN_TO_COMPRESS * self.MSG_PER_TURN,
+                    MSG_TO_COMPRESS=MSG_TO_COMPRESS,
                     TURN_TO_COMPRESS=self.TURN_TO_COMPRESS,
                 )
+                
+                await self._session_manager.redis_delete_left(session_id, limit=MSG_TO_COMPRESS)
 
-            # 6. Get history messages
-            history_summary = metadata.get("summary", "")
-            history_messages = []
-            if history_summary:
-                history_messages.append(Message(
-                    role=Role.SYSTEM,
-                    content=history_summary,
-                ))
-
-            history_messages += await self._session_manager.redis_get_right(session_id, limit=self.TURN_TO_KEEP * self.MSG_PER_TURN)
-
-            # 7. Build LLM input messages and call LLM to get response
-            student_msg_obj = Message(
-                role=Role.USER, 
-                content=student_message,
-                correlation_id=correlation_id,
-            )
-            
-            llm_input_messages = history_messages + [student_msg_obj]
-
-            llm_response = await self._llm_manager.generate_response(
-                system_prompt=system_prompt,
-                messages=llm_input_messages,
+            response_content, updated_metadata, token_usage = await self._orchestration.process(
+                request=request,
+                history_msg=history_msg,
+                session_metadata=metadata,
             )
 
-            # 8. Save user message and assistant response to session history
-            llm_msg_obj = Message(
-                role=Role.ASSISTANT,
-                content=llm_response.content,
-                correlation_id=correlation_id,
-            )
-            await self._session_manager.redis_save_turn(session_id, student_msg_obj, llm_msg_obj)
+            await self._session_manager.redis_save_metadata(session_id, updated_metadata)
 
-            # 9. Increment turn count in metadata
-            metadata["turn_count"] += 1
-            await self._session_manager.redis_save_metadata(session_id, metadata)
-
-            # 10. Return response to user
-            chatbot_response = ChatResponse(
-                content=llm_response.content,
-                usage=llm_response.usage.model_dump() if llm_response.usage else {},
-                correlation_id=correlation_id,
+            user_msg_obj = Message(role=Role.USER, content=request.message)
+            assistant_msg_obj = Message(role=Role.ASSISTANT, content=response_content)
+            await self._session_manager.redis_save_turn(
+                session_id=session_id,
+                user_message=user_msg_obj,
+                assistant_message=assistant_msg_obj,
             )
 
             logger.info(
-                "chatbot.processing.completed",
+                "chatbot.run.succeeded",
                 session_id=session_id,
-                log_type="business",
-                model_name=llm_response.model_name,
-                usage=chatbot_response.usage,
+                log_type="info",
+                token_usage=token_usage,
             )
-
-            return chatbot_response
-        
+            return ChatResponse(
+                content=response_content,
+                usage=token_usage,
+                correlation_id=correlation_id,
+            )
+            
         except (
             PromptGenerationError,
             LLMManagerError,
@@ -197,3 +164,4 @@ class ChatbotUseCase:
             )
             raise ChatBotUseCaseError("An unexpected error occurred.") from e
         
+
