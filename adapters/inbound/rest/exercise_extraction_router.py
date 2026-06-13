@@ -11,7 +11,7 @@ from application.stateless_services.adaptive_learning_service import AdaptiveLea
 from application.services.exercise_manager import ExerciseManager
 from application.services.profile_manager import ProfileManager
 
-from adapters.inbound.rest.schemas import ExerciseExtractionRequest
+from adapters.inbound.rest.schemas import ExerciseExtractionRequest, ExerciseSelectionRequest, ExerciseSelectionResponse
 
 from domain.models.overall_models.response import ExerciseExtractionResponse
 from domain.models.lesson2_models.exercise import Problem
@@ -22,16 +22,16 @@ from infrastructure.logging import logger
 
 router = APIRouter()
 
-@router.post("/extract", response_model=ExerciseExtractionResponse)
+@router.post("/extract/lesson2", response_model=ExerciseExtractionResponse)
 @inject
 async def extract_exercises(
     request: ExerciseExtractionRequest,
-    exercise_selection_manager: ExerciseExtractionUseCase = Depends(Provide[Container.exercise_extraction_manager]),
+    exercise_extraction_manager: ExerciseExtractionUseCase = Depends(Provide[Container.exercise_extraction_manager]),
 ) -> ExerciseExtractionResponse:
     try:
-        response = await exercise_selection_manager.run(
+        response = await exercise_extraction_manager.run(
             user_id=request.user_id,
-            correlation_id=request.corr_id,
+            correlation_id=request.correlation_id,
             document_url=request.document_url,
             subject=request.subject,
             topic=request.topic,
@@ -52,29 +52,31 @@ async def extract_exercises(
             detail=f"Error processing exercise extraction: {str(e)}",
         )
 
-@router.post("/select", response_model=List[Problem])
+@router.post("/select/lesson2", response_model=List[Problem])
 @inject
 async def select_exercises(
-    exercise_id: str,
-    user_id: str,
+    request: ExerciseSelectionRequest,
     exercise_manager: ExerciseManager = Depends(Provide[Container.exercise_manager]),
     profile_manager: ProfileManager = Depends(Provide[Container.profile_manager]),
     adaptive_learning_service: AdaptiveLearningService = Depends(Provide[Container.adaptive_learning_service]),
-) -> List[Problem]:
+) -> ExerciseSelectionResponse:
     try:
-        student_profile = await profile_manager.get_student_profile(user_id=user_id)
-        exercise = await exercise_manager.get_exercise(exercise_id=exercise_id, user_id=user_id)
+        student_profile = await profile_manager.get_student_profile(user_id=request.user_id)
+        exercise = await exercise_manager.get_exercise(exercise_id=request.exercise_id, user_id=request.user_id)
 
         selected_problems = await adaptive_learning_service.problem_select(
             exercise=exercise,
             student_profile=student_profile
         )
 
-        response = []
+        selected_problems = []
         for _, problem_list in selected_problems.problem_set:
-            response.append(problem_list[0])  # For simplicity, we return the first problem of each role. This can be adjusted as needed.
+            selected_problems.append(problem_list[0])  # For simplicity, we return the first problem of each role. This can be adjusted as needed.
 
-        return response
+        return ExerciseSelectionResponse(
+            selected_problems=selected_problems,
+            correlation_id=request.correlation_id
+        )
 
     except (ExerciseManagerError, ProfileManagerError, ProblemSelectionAnalysisError) as e:
         raise HTTPException(

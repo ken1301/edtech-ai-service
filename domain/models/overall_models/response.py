@@ -17,10 +17,11 @@ class LLMResponse(BaseModel):
     usage: TokenUsage
 
 
-class ChatResponse(BaseModel):
+class Lesson2ChatResponse(BaseModel):
     content: str
     usage: List[Any]
     correlation_id: str
+    current_process: float
 
 
 class ExerciseExtractionResponse(BaseModel):

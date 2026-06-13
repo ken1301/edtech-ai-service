@@ -11,7 +11,7 @@ from domain.models.lesson2_models.exercise import Problem
 class Lesson2Request(BaseModel):
     user_id: str
     session_id: str
-    corr_id: str
+    correlation_id: str
 
     subject: Subject
     topic: Topic

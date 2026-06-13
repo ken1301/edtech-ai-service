@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Tuple
 from domain.models.overall_models.curriculum import Subject, Topic, Concept
 from domain.models.overall_models.message import Message
 from domain.models.overall_models.common import Role
-from domain.models.overall_models.response import ChatResponse
+from domain.models.overall_models.response import Lesson2ChatResponse
 from domain.models.lesson2_models.meta import Lesson2Request, SessionMetadata
 
 from application.stateless_services.lesson2_service.orchestration import Lesson2Orchestration
@@ -59,7 +59,6 @@ class ChatbotUseCase:
             raise AuthorizationError("Session not found.")
         if metadata.user_id != user_id:
             raise AuthorizationError("User not authorized for this session.")
-        return metadata
 
     async def run(
         self,
@@ -71,7 +70,7 @@ class ChatbotUseCase:
         topic: Topic,
         concept: Concept,
         background_task: BackgroundTasks,
-    ):
+    ) -> Lesson2ChatResponse:
         """Main pipeline for processing a user message and generating a chatbot response."""
         
         try:
@@ -90,10 +89,11 @@ class ChatbotUseCase:
                     concept=concept,
                 )
                 # return because if we raise an exception here, FastAPI would not execute the background task
-                return ChatResponse(
+                return Lesson2ChatResponse(
                     content="This session has expired. System is syncing data and closing the session. Please start a new session to continue.",
                     usage=None,
                     correlation_id=correlation_id,
+                    current_process=metadata.current_process,
                 )
 
             if metadata.turn_count > self.TURN_THRESHOLD: 
@@ -130,10 +130,11 @@ class ChatbotUseCase:
                 log_type="info",
                 token_usage=token_usage,
             )
-            return ChatResponse(
+            return Lesson2ChatResponse(
                 content=response_content,
                 usage=token_usage,
                 correlation_id=correlation_id,
+                current_process=updated_metadata.current_process,
             )
             
         except (

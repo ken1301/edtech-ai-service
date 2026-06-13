@@ -1,12 +1,12 @@
 """
-Setup configuration for Socratic AI Chat API
+Setup configuration for AI service package.
 """
 from setuptools import setup, find_packages
 
 setup(
-    name="socratic-ai-chat",
+    name="ai-service",
     version="1.0.0",
-    description="Socratic method-based educational AI chat API",
+    description="AI service package for handling AI-related functionality",
     author="Your Team",
     packages=find_packages(exclude=["tests", ".venv", "__pycache__"]),
     python_requires=">=3.9",
@@ -27,7 +27,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "socratic-ai-chat=__main__:main",
+            "ai-service=__main__:main",
         ],
     },
 )
