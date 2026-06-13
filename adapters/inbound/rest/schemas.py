@@ -1,13 +1,18 @@
-import uuid
-from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from typing import Optional, Literal
 
-from domain.models.curriculum import Subject
-class ChatRequest(BaseModel):
+from domain.models.lesson2_models.meta import Lesson2Request
+
+ChatRequest = Lesson2Request
+
+class ExerciseExtractionRequest(BaseModel):
     user_id: str
-    session_id: str
-    message: str = Field(..., min_length=1)
-    subject: Subject # "math" and "it"
-    topic: str = "General"
-    lang: Literal["vi", "en"] = "vi"
-    corr_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    corr_id: str
+
+    document_url: str
+
+    subject: str
+    topic: str
+    concept: str
+
+

@@ -3,7 +3,7 @@ from typing import List, Optional, Literal
 from pydantic import BaseModel
 
 from domain.models.overall_models.message import Message
-from domain.models.lesson2_models.common import SubmissionData
+from domain.models.lesson2_models.common import SubmissionData, Lesson2LayerUsage  # noqa: F401  (re-export)
 
 
 class Intent(str, Enum):
@@ -19,26 +19,24 @@ class Intent(str, Enum):
     JAILBREAK_ATTEMPT = "jailbreak_attempt"
     UNINTELLIGIBLE = "unintelligible"
 
-
 class EmotionalSignal(BaseModel):
     valence: float
     frustration: float
     confusion: float
     confidence_tone: float
 
-
 class Routing(str, Enum):
     FAST_PATH_REPLY = "fast_path_reply"
     FULL_PIPELINE = "full_pipeline"
     SAFETY_DIVERT = "safety_divert"
 
-
 class ClassifyInput(BaseModel):
-    msg: str
+    user_msg: str
     is_submission: bool
     submission_data: Optional[SubmissionData] = None
     recent_messages: List[Message]
-
+    current_problem_id: Optional[int] = None 
+    problem_question: List[str] = [] # all questions of the problem (id from 1 to 4)
 
 class ClassifyOutput(BaseModel):
     intent: Intent
@@ -46,7 +44,5 @@ class ClassifyOutput(BaseModel):
     emotional: EmotionalSignal
     learning_relevance: float
     references_problem_id: Optional[int]
-    language: str
-    code_switching: bool
     abuse_flags: List[Literal["jailbreak", "extract_answer", "hostile", "spam"]]
     routing: Routing

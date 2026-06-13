@@ -1,5 +1,7 @@
+import base64
 import asyncio
 import os
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote, urlparse
 
@@ -7,7 +9,7 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from domain.ports.cloud_port import CloudPort
-from domain.models.overall_models.document import PDFDocument, ImageDocument
+from domain.models.overall_models.document import PDFDocument, ImageDocument, MarkdownDocument
 
 from domain.exceptions import CloudAdapterError
 
@@ -30,6 +32,18 @@ class S3Adapter(CloudPort):
         return f"{document_type}/{document_id}/{quote(filename, safe='')}"
 
     def _extract_key(self, document_url: str) -> str:
+        parsed = urlparse(document_url)
+
+        if parsed.netloc and "download-shared-object" in parsed.path:
+            encoded_url = parsed.path.rsplit("/", 1)[-1]
+            padding = (-len(encoded_url)) % 4
+            if padding:
+                encoded_url += "=" * padding
+            try:
+                document_url = base64.urlsafe_b64decode(encoded_url).decode("utf-8")
+            except Exception:
+                pass
+
         parsed = urlparse(document_url)
         key = parsed.path.lstrip("/") or document_url.lstrip("/")
         if key.startswith(f"{self._bucket_name}/"):
@@ -58,111 +72,52 @@ class S3Adapter(CloudPort):
             return f"{endpoint_url.rstrip('/')}/{self._bucket_name}/{key}"
         return f"https://{self._bucket_name}.s3.amazonaws.com/{key}"
 
-    async def upload_pdf(self, document: PDFDocument) -> str:
+    async def upload_document(self, document: PDFDocument | ImageDocument | MarkdownDocument) -> str:
+        if isinstance(document, PDFDocument):
+            document_type = "pdfs"
+            content_type = "application/pdf"
+        elif isinstance(document, ImageDocument):
+            document_type = "images"
+            content_type = "image/*"
+        else:
+            document_type = "markdown"
+            content_type = "text/markdown; charset=utf-8"
+
         try:
             logger.debug(
-                "s3_adapter.upload_pdf.completed",
+                "s3_adapter.upload_document.completed",
                 log_type="debug",
                 document_id=document.id,
                 filename=document.filename,
+                document_type=document_type,
             )
-            return await asyncio.to_thread(self._upload_document, document, "pdfs", "application/pdf")     
+            return await asyncio.to_thread(self._upload_document, document, document_type, content_type)
         except (BotoCoreError, ClientError) as e:
             logger.error(
-                "s3_adapter.upload_pdf.failed",
+                "s3_adapter.upload_document.failed",
                 log_type="technical",
                 document_id=document.id,
                 filename=document.filename,
                 error=str(e),
             )
-            raise CloudAdapterError(f"Failed to upload PDF document '{document.filename}' to cloud storage.") from e
+            raise CloudAdapterError(f"Failed to upload document '{document.filename}' to cloud storage.") from e
         except Exception as e:
             logger.error(
-                "s3_adapter.upload_pdf.unexpected_error",
+                "s3_adapter.upload_document.unexpected_error",
                 log_type="technical",
                 document_id=document.id,
                 filename=document.filename,
                 error=str(e),
             )
-            raise CloudAdapterError("An unexpected error occurred while uploading a PDF document.") from e
+            raise CloudAdapterError("An unexpected error occurred while uploading a document.") from e
 
-    async def download_pdf(self, document_url: str) -> PDFDocument:
-        try:
-            logger.debug(
-                "s3_adapter.download_pdf.completed",
-                log_type="debug",
-                document_url=document_url,
-            )
-            return await asyncio.to_thread(self._download_pdf, document_url)
-        except (BotoCoreError, ClientError) as e:
-            logger.error(
-                "s3_adapter.download_pdf.failed",
-                log_type="technical",
-                document_url=document_url,
-                error=str(e),
-            )
-            raise CloudAdapterError(f"Failed to download PDF document from '{document_url}'.") from e
-        except Exception as e:
-            logger.error(
-                "s3_adapter.download_pdf.unexpected_error",
-                log_type="technical",
-                document_url=document_url,
-                error=str(e),
-            )
-            raise CloudAdapterError("An unexpected error occurred while downloading a PDF document.") from e
-
-    async def upload_image(self, document: ImageDocument) -> str:
-        try:
-            logger.debug(
-                "s3_adapter.upload_image.completed",
-                log_type="debug",
-                document_id=document.id,
-                filename=document.filename,
-            )
-            return await asyncio.to_thread(self._upload_document, document, "images", "image/*")
-        except (BotoCoreError, ClientError) as e:
-            logger.error(
-                "s3_adapter.upload_image.failed",
-                log_type="technical",
-                document_id=document.id,
-                filename=document.filename,
-                error=str(e),
-            )
-            raise CloudAdapterError(f"Failed to upload image document '{document.filename}' to cloud storage.") from e
-        except Exception as e:
-            logger.error(
-                "s3_adapter.upload_image.unexpected_error",
-                log_type="technical",
-                document_id=document.id,
-                filename=document.filename,
-                error=str(e),
-            )
-            raise CloudAdapterError("An unexpected error occurred while uploading an image document.") from e
-
-    async def download_image(self, document_url: str) -> ImageDocument:
-        try:
-            logger.debug(
-                "s3_adapter.download_image.completed",
-                log_type="debug",
-                document_url=document_url,
-            )
+    async def download_document(self, document_url: str) -> PDFDocument | ImageDocument | MarkdownDocument:
+        document_type = self._infer_document_type(document_url)
+        if document_type == "markdown":
+            return await asyncio.to_thread(self._download_markdown, document_url)
+        if document_type == "image":
             return await asyncio.to_thread(self._download_image, document_url)
-        except (BotoCoreError, ClientError) as e:
-            logger.error(
-                "s3_adapter.download_image.failed",
-                log_type="technical",
-                document_url=document_url,
-                error=str(e),
-            )
-            raise CloudAdapterError(f"Failed to download image document from '{document_url}'.") from e
-        except Exception as e:
-            logger.error(
-                "s3_adapter.download_image.unexpected_error",
-                log_type="technical",
-                document_url=document_url,
-                error=str(e),
-            )
-            raise CloudAdapterError("An unexpected error occurred while downloading an image document.") from e
+        return await asyncio.to_thread(self._download_pdf, document_url)
 
     async def delete_document(self, document_url: str) -> bool:
         try:
@@ -190,7 +145,7 @@ class S3Adapter(CloudPort):
             )
             raise CloudAdapterError("An unexpected error occurred while deleting a document.") from e
 
-    def _upload_document(self, document: PDFDocument | ImageDocument, document_type: str, content_type: str) -> str:
+    def _upload_document(self, document: PDFDocument | ImageDocument | MarkdownDocument, document_type: str, content_type: str) -> str:
         self._ensure_bucket_exists()
         key = self._document_key(document_type, document.id, document.filename)
         self.s3_client.put_object(
@@ -205,6 +160,15 @@ class S3Adapter(CloudPort):
         )
         return self._object_url(key)
 
+    def _infer_document_type(self, document_url: str) -> str:
+        key = self._extract_key(document_url)
+        suffix = Path(key).suffix.lower()
+        if suffix in {".md", ".markdown"}:
+            return "markdown"
+        if suffix in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}:
+            return "image"
+        return "pdf"
+
     def _download_pdf(self, document_url: str) -> PDFDocument:
         self._ensure_bucket_exists()
         key = self._extract_key(document_url)
@@ -216,6 +180,19 @@ class S3Adapter(CloudPort):
             filename=filename,
             content=content,
             size_bytes=response.get("ContentLength", len(content)),
+        )
+
+    def _download_markdown(self, document_url: str) -> MarkdownDocument:
+        self._ensure_bucket_exists()
+        key = self._extract_key(document_url)
+        response = self.s3_client.get_object(Bucket=self._bucket_name, Key=key)
+        content = response["Body"].read().decode("utf-8")
+        document_id, filename = self._split_key(key)
+        return MarkdownDocument(
+            id=document_id,
+            filename=filename,
+            content=content,
+            parent_pdf_id=response.get("Metadata", {}).get("parent_pdf_id"),
         )
 
     def _download_image(self, document_url: str) -> ImageDocument:

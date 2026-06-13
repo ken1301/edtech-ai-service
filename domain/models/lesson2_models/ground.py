@@ -3,12 +3,14 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from domain.models.lesson2_models.exercise import Approach
+from domain.models.lesson2_models.common import Lesson2LayerUsage  # noqa: F401  (re-export)
 
 
 class ApproachVerdict(str, Enum):
     CORRECT = "CORRECT"
     WEAK = "WEAK"
     INCORRECT = "INCORRECT"
+    NOT_AN_ANSWER = "NOT_AN_ANSWER"
 
 
 class GroundInput(BaseModel):
@@ -20,31 +22,10 @@ class GroundInput(BaseModel):
     student_submitted_answer: str
     result_status: bool
 
-    @property
-    def submitted_answer(self) -> str:
-        return self.student_submitted_answer
-
-    @property
-    def submission_status(self) -> bool:
-        return self.result_status
-
-
 class GroundOutput(BaseModel):
-    result_status: bool
     approach_verdict: ApproachVerdict
 
     matched_approach_id: Optional[int] = None
     matched_weakness: Optional[str] = None
-
     judge_confidence: float
     explanation: str
-
-    @property
-    def approach_status(self) -> ApproachVerdict:
-        return self.approach_verdict
-
-    @property
-    def approach_weaknesses(self) -> List[str]:
-        if self.matched_weakness is None:
-            return []
-        return [self.matched_weakness]

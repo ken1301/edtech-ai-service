@@ -18,7 +18,15 @@ class Settings(BaseSettings):
     MONGO_USER: str
     MONGO_PASSWORD: str
     MONGO_PORT: int
-    
+
+    # Cloud Storage
+    MINIO_API_PORT: int
+    MINIO_CONSOLE_PORT: int
+    MINIO_ROOT_USER: str
+    MINIO_ROOT_PASSWORD: str
+    MINIO_ENDPOINT_URL: str
+    REGION_NAME: str
+
     # NestJS Backend
     NESTJS_BACKEND_URL: str = "http://localhost:3000"
 

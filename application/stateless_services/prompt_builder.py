@@ -6,8 +6,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
-from domain.ports.profile_store_port import ProfileStorePort
-
 from domain.models.overall_models.curriculum import Subject, Topic, Concept
 from domain.models.overall_models.profile import StudentProfile
 from domain.models.lesson2_models.evaluate import Phase
@@ -24,12 +22,7 @@ class PromptBuilder:
     _LEGACY_PROMPT_TEMPLATE_DIR = _BASE_DIR / "prompt_templates"
     _LESSON2_PROMPT_TEMPLATE_DIR = _BASE_DIR / "lesson2_prompts"
 
-    THINKING_PROMPT = (_LEGACY_PROMPT_TEMPLATE_DIR / "thinking_prompt.txt").read_text(encoding="utf-8")
-    ANSWERING_PROMPT = (_LEGACY_PROMPT_TEMPLATE_DIR / "answering_prompt.txt").read_text(encoding="utf-8")
-    COMPRESS_CONTEXT_PROMPT = (_LEGACY_PROMPT_TEMPLATE_DIR / "compress_context_prompt.txt").read_text(encoding="utf-8")
-    SUMMARIZE_SESSION_PROMPT = (_LEGACY_PROMPT_TEMPLATE_DIR / "summarize_session_prompt.txt").read_text(encoding="utf-8")
-    EXERCISE_EXTRACTION_PROMPT = (_LEGACY_PROMPT_TEMPLATE_DIR / "exercise_extraction_prompt.txt").read_text(encoding="utf-8")
-
+    LESSON2_EXERCISE_EXTRACTION_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "lesson2_exercise_extraction.txt").read_text(encoding="utf-8")
     LESSON2_COMPRESS_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "compress.txt").read_text(encoding="utf-8")
     LESSON2_SUMMARIZE_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "summarize.txt").read_text(encoding="utf-8")
 
@@ -44,8 +37,8 @@ class PromptBuilder:
     LESSON2_RESPOND_PHASE_O_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "respond_phase_o.txt").read_text(encoding="utf-8")
     LESSON2_RESPOND_WRAP_UP_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "respond_wrap_up.txt").read_text(encoding="utf-8")
 
-    def __init__(self, profile_store: ProfileStorePort):
-        self._profile_store = profile_store
+    def __init__(self):
+        pass
 
     @staticmethod
     def _serialize_value(value: Any) -> str:
@@ -299,4 +292,22 @@ class PromptBuilder:
             )
             raise PromptGenerationError("Failed to generate summarize prompt.") from e
 
-    
+    async def lesson2_exercise_extraction_prompt(self, **context: Any) -> str:
+        try:
+            return self._render_template(self.LESSON2_EXERCISE_EXTRACTION_PROMPT, **context)
+        except (ValueError, TypeError) as e:
+            logger.error(
+                "prompt_builder.lesson2_exercise_extraction_prompt.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate exercise extraction prompt.") from e
+        except Exception as e:
+            logger.error(
+                "prompt_builder.lesson2_exercise_extraction_prompt.unexpected.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate exercise extraction prompt.") from e

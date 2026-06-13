@@ -305,6 +305,46 @@ class RedisSessionAdapter(SessionStorePort):
             )
             raise SessionStoreError("An unexpected error occurred while saving a message turn.") from e
 
+    async def get_history_messages(self, session_id: str) -> list[Message]:
+        """Return the full message history for a session, ordered by insertion time."""
+        try:
+            raws = await self._redis.lrange(self._msg_key(session_id), 0, -1)
+            logger.debug(
+                "redis_adapter.get_all_messages.completed",
+                log_type="debug",
+                session_id=session_id,
+                count=len(raws),
+            )
+            return [self._deserialize_message(r) for r in raws]
+        except RedisError as e:
+            logger.error(
+                "redis_adapter.get_all_messages.failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+            )
+            raise SessionStoreError(
+                f"Failed to fetch all messages for session '{session_id}' from Redis."
+            ) from e
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            logger.error(
+                "redis_adapter.get_all_messages.deserialize_failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+            )
+            raise SessionStoreError(
+                f"Corrupt message data in session '{session_id}'."
+            ) from e
+        except Exception as e:
+            logger.error(
+                "redis_adapter.get_all_messages.unexpected_error",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+            )
+            raise SessionStoreError("An unexpected error occurred while fetching all session messages.") from e
+
     async def get_right(self, session_id: str, limit: int) -> list[Message]:
         """Return the N most recent messages (right / newest end of list)."""
         try:
@@ -475,6 +515,3 @@ class RedisSessionAdapter(SessionStorePort):
 
     async def save_messages(self, *args, **kwargs):
         raise NotImplementedError("save_messages is a MongoDB operation.")
-
-    async def get_history_messages(self, *args, **kwargs):
-        raise NotImplementedError("get_history_messages is a MongoDB operation.")

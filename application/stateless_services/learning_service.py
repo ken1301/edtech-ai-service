@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from application.stateless_services.llm_manager import LLMManager
 from application.services.session_manager import SessionManager
@@ -9,7 +9,7 @@ from application.stateless_services.adaptive_learning_service import AdaptiveLea
 from domain.models.overall_models.curriculum import Subject, Topic, Concept
 from domain.models.lesson2_models.meta import SessionMetadata, CompressedHistoryMsgInput, SummarizeSessionInput
 from domain.models.overall_models.message import ConversationContext, Message
-from domain.models.overall_models.profile import SessionSummary, StudentPreference, LearningDetails
+from domain.models.overall_models.profile import SessionSummary
 
 from infrastructure.logging import logger
 
@@ -52,12 +52,13 @@ class LearningService:
         subject: Subject,
         topic: Topic,
         concept: Concept,
-        history_msg: List[Message],
-        metadata: SessionMetadata,
     ):
         """Background task to sync session data, summarize session, and perform any necessary cleanup when a session expires."""
         
         try:
+            history_msg = await self._session_manager.redis_get_all_messages(session_id=session_id)
+            metadata = await self._session_manager.redis_get_metadata(session_id=session_id)
+
             # 1. Save the remaining session history to MongoDB for long-term storage and analysis 
             await self._session_manager.mongo_save_messages(
                 user_id=user_id,
@@ -74,27 +75,31 @@ class LearningService:
                 session_metadata=metadata,
             )
             summarize_prompt = await self._prompt_builder.lesson2_summarize_prompt(**summarize_input.model_dump())
-            summary_response = await self._llm_manager.generate_response(
+            session_summary = await self._llm_manager.generate_response(
                 system_prompt=summarize_prompt,
                 messages=[],
-                context=self.conversation_context,
+                conversation_context=self.conversation_context,
                 response_model=SessionSummary
             )
             
-            # 3. Save the student preference and knowledge map to MongoDB
-            student_preference = summary_response.content.student_preference
-            topic_mastery = summary_response.content.topic_mastery
+            # 3. Save the student profile to MongoDB
+            student_profile = await self._profile_manager.get_student_profile(user_id=user_id)
+            student_preference, learning_detail = await self._adaptive_learning_service.update_student_profile(
+                session_summary=session_summary,
+                student_profile=student_profile
+            )
+
             await self._profile_manager.update_student_profile(
                 user_id=user_id,
                 subject=subject,
                 topic=topic,
                 concept=concept,
                 student_preference=student_preference,
-                topic_mastery=topic_mastery
+                learning_detail=learning_detail
             )
 
             # 4. Disable session and delete the session data from Redis to free up memory
-            metadata["is_active"] = False
+            metadata.is_active = False
             await self._session_manager.redis_save_metadata(session_id, metadata)
             await self._session_manager.redis_delete_session(session_id)
 
@@ -127,7 +132,7 @@ class LearningService:
     ) -> SessionMetadata:
         """Compress the session history in Redis by summarizing older messages using the LLM."""
         try:
-            compress_input = await self._build_compression_input(
+            compress_input = self._build_compression_input(
                 history_msg=history_msg[:MSG_TO_COMPRESS],
                 session_metadata=metadata,
             )
@@ -135,7 +140,7 @@ class LearningService:
             compress_output = await self._llm_manager.generate_response(
                 system_prompt=compress_prompt,
                 messages=[],
-                context=self.conversation_context,
+                conversation_context=self.conversation_context,
             )
 
             metadata.history_compression = compress_output.content
@@ -175,17 +180,56 @@ class LearningService:
             raise CompressSessionHistoryError("Unexpected error during history compression.") from e
 
     @staticmethod
+    def _render_messages(history_msg: List[Message]) -> str:
+        return "\n".join(f"{m.role.value}: {m.content}" for m in history_msg)
+
+    @staticmethod
+    def _concept_name(session_metadata: SessionMetadata) -> Optional[str]:
+        concept = session_metadata.concept
+        if concept is None:
+            return None
+        return getattr(concept, "name", None) or str(concept)
+
+    @classmethod
     def _build_compression_input(
+        cls,
         history_msg: List[Message],
         session_metadata: SessionMetadata,
     ) -> CompressedHistoryMsgInput:
-        """Helper method to build the input for the compression prompt."""
-        return CompressedHistoryMsgInput()
+        """Build the input for the compress_history prompt: the older messages to fold in,
+        plus the running compression and lesson context for continuity."""
+        return CompressedHistoryMsgInput(
+            messages_to_compress=cls._render_messages(history_msg),
+            existing_compression=session_metadata.history_compression,
+            concept_name=cls._concept_name(session_metadata),
+            current_problem_id=session_metadata.current_problem_id,
+        )
 
-    @staticmethod
+    @classmethod
     def _build_summarization_input(
+        cls,
         history_msg: List[Message],
         session_metadata: SessionMetadata,
     ) -> SummarizeSessionInput:
-        """Helper method to build the input for the session summarization prompt."""
-        return SummarizeSessionInput()
+        """Build the input for the summarize_session prompt: full conversation + per-problem
+        outcomes + misconceptions, used to produce a durable student-profile summary."""
+        outcomes = []
+        for pid, state in session_metadata.problem_state.items():
+            solved = getattr(state, "solved", False)
+            outcomes.append(
+                f"problem {pid}: solved={solved}, "
+                f"attempts={state.approach_trial_count}, "
+                f"submissions={len(state.submission_state)}"
+            )
+        misconceptions = [
+            f"{m.misconception_type.value}: {m.description} (fixed={m.fixed})"
+            for m in session_metadata.misconception_list
+        ]
+        return SummarizeSessionInput(
+            messages=cls._render_messages(history_msg),
+            existing_compression=session_metadata.history_compression,
+            concept_name=cls._concept_name(session_metadata),
+            problem_outcomes="\n".join(outcomes),
+            misconceptions="\n".join(misconceptions),
+            current_progress=session_metadata.current_progress,
+        )

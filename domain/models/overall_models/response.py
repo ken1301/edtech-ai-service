@@ -1,6 +1,7 @@
 from pydantic import BaseModel
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union, List
 
+from domain.models.lesson2_models.exercise import Exercise
 
 class TokenUsage(BaseModel):
     prompt_tokens: int
@@ -18,5 +19,11 @@ class LLMResponse(BaseModel):
 
 class ChatResponse(BaseModel):
     content: str
-    usage: Optional[Dict[str, Any]]
+    usage: List[Any]
+    correlation_id: str
+
+
+class ExerciseExtractionResponse(BaseModel):
+    output: Exercise
+    usage: TokenUsage
     correlation_id: str

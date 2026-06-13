@@ -16,10 +16,19 @@ class ProfileManager:
     ):
         self._profile_store = profile_store
 
-    async def get_student_profile(self, user_id: str) -> StudentProfile:
+    async def get_student_profile(self, user_id: str) -> StudentProfile | None:
         """Fetch the student profile from the profile store (MongoDB) using the user ID."""
         try: 
             student_profile = await self._profile_store.get_student_profile(user_id=user_id)
+
+            if not student_profile:
+                logger.warning(
+                    "profile_manager.get_student_profile.not_found",
+                    log_type="business",
+                    user_id=user_id,
+                )
+                return None
+
             logger.info(
                 "profile_manager.get_student_profile.completed",
                 log_type="business",

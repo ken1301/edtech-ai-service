@@ -88,7 +88,6 @@ class ChatbotUseCase:
                     subject=subject,
                     topic=topic,
                     concept=concept,
-                    metadata=metadata,
                 )
                 # return because if we raise an exception here, FastAPI would not execute the background task
                 return ChatResponse(

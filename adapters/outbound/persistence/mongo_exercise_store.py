@@ -21,7 +21,7 @@ class MongoExerciseAdapter(ExerciseStorePort):
     async def save_exercise(
         self,
         exercise_id: str,
-        author_id: str,
+        user_id: str,
         exercise: Exercise
     ) -> bool:
         now = datetime.now(timezone.utc)
@@ -31,9 +31,12 @@ class MongoExerciseAdapter(ExerciseStorePort):
                 {"exercise_id": exercise_id},
                 {
                     "$set": {
-                        "author_id": author_id,
+                        "user_id": user_id,
                         "exercise": exercise.model_dump(mode="json"),
                         "updated_at": now,
+                        "subject": exercise.subject.value,
+                        "topic": exercise.topic.value,
+                        "concept": exercise.concept.value,
                     },
                     "$setOnInsert": {
                         "exercise_id": exercise_id,
@@ -46,7 +49,7 @@ class MongoExerciseAdapter(ExerciseStorePort):
                 "mongo_exercise_store.save_exercise.completed",
                 log_type="debug",
                 exercise_id=exercise_id,
-                author_id=author_id,
+                user_id=user_id,
             )
             return result.acknowledged
         except PyMongoError as e:
@@ -54,7 +57,7 @@ class MongoExerciseAdapter(ExerciseStorePort):
                 "mongo_exercise_store.save_exercise.failed",
                 log_type="technical",
                 exercise_id=exercise_id,
-                author_id=author_id,
+                user_id=user_id,
                 error=str(e),
             )
             raise ExerciseStoreError(f"Failed to save exercise '{exercise_id}' to MongoDB.") from e
@@ -63,7 +66,7 @@ class MongoExerciseAdapter(ExerciseStorePort):
                 "mongo_exercise_store.save_exercise.unexpected_error",
                 log_type="technical",
                 exercise_id=exercise_id,
-                author_id=author_id,
+                user_id=user_id,
                 error=str(e),
             )
             raise ExerciseStoreError("An unexpected error occurred while saving an exercise.") from e

@@ -1,84 +1,52 @@
-# Loggin and Error Handling Guidelines
+You are a senior software engineer working on an educational chatbot system.
 
-- Adapter do not log happy path events, only errors and critical information:
-```python
-try: 
-    # code
-    logger.debug(
-        "<adapter_name>.<method_name>.completed",
-        log_type="debug",
-        # any additional context fields
-    )
-        
-except <type_of_error> as e:
-    logger.error(
-        "<adapter_name>.<method_name>.failed",
-        log_type="technical",
-        error=str(e),
-    )
-    raise <custom_adapter_error>(<failed_message>) from e
-# You can catch specific exceptions (e.g., database errors, validation errors) to provide more granular error handling and logging. Always re-raise exceptions as custom service errors to maintain a consistent error handling strategy across the application.
+## Pre-coding Steps (MANDATORY)
+Before writing any code, read and internalize the following files to understand the existing architecture and your task:
+- `domain/model/`
+- `application/use_cases/chatbot_usecase.py`
+- `application/stateless_services/lesson2_service/`
+- `vibecode/docs/overall.md`
 
-# Finally, catch any unexpected exceptions to ensure that all errors are logged and handled gracefully:
-except Exception as e:
-    logger.error(
-        "<adapter_name>.<method_name>.unexpected.failed",
-        log_type="technical",
-        error=str(e),
-    )
-    raise <custom_adapter_error>(<failed_message>) from e
-```
+---
 
-- Service layer catch error from adapter and log it, then re-raise as custom service error:
-```python
-try:
-    # code
-    logger.info(
-        "<service_name>.<method_name>.completed",
-        log_type="business",
-        # any additional context fields
-    )
+## Your Tasks
 
-except <custom_adapter_error> as e:
-    # Do not logger error at service layer, just re-raise as custom service error
-    raise <custom_service_error>(<failed_message>) from e
+### 1. Complete Layer I/O + Core Session Logic
+- Define the complete **input and output contracts** for every layer in the pipeline.
+- For each input field, write the **construction logic** — i.e., how that value is derived from:
+  - `history_msg`, `history_compression`, `session_metadata`
+  - outputs from previously-called layers in the same turn
+- Implement `compress_history` and `summarize_session`.
 
-# Only logging unexpected exceptions at service layer
-except Exception as e:
-    logger.error(
-        "<service_name>.<method_name>.unexpected.failed",
-        log_type="technical",
-        error=str(e),
-        exc_info=True,
-    )
-    raise <custom_service_error>(<failed_message>) from e
-```
+---
 
-- Usecase layer catch error from service and log it, then re-raise as custom usecase error:
-```python
-try:
-    # code
-    logger.info(
-        "<usecase_name>.<method_name>.completed",
-        log_type="business",
-        # any additional context fields
-    )
+### 2. Write All Prompts (as `.txt` files, XML-tagged)
+Each prompt file must use `<tag>` XML-style tags where each tag name matches the corresponding layer's input field schema.
 
-except <custom_service_error> as e:
-    logger.error(
-        "<usecase_name>.<which_service>.failed",
-        log_type="technical",
-        error=str(e),
-        exc_info=True,
-    )
-    raise <custom_usecase_error>(<failed_message>) from e
+Write prompts for:
 
-except Exception as e:
-    logger.error(
-        "<usecase_name>.<method_name>.unexpected.failed",
-        log_type="technical",
-        error=str(e),
-        exc_info=True,
-    )
-    raise <custom_usecase_error>(<failed_message>) from e
-```
+- **Pipeline layers:** `classify`, `ground`, `evaluate`
+- **Response layer:** one prompt per phase — `P`, `D`, `E`, `O`
+- **Non-learning response prompt** (must include safety handling)
+- **Wrap-up response prompt** — triggered after all 4 problems are completed; congratulates the student and gives a brief summary of the 4 problems. Note: this is NOT `summarize_session` — do not include deep pedagogical analysis
+- **`compress_history` prompt**
+- **`summarize_session` prompt**
+
+---
+
+### 3. Complete Response Directive & Tone Arbiter Logic
+- Implement the selection logic for `response_directive`
+- Implement the decision logic for `tone_arbiter`
+
+---
+
+### 4. Complete `state_writer_layer` Logic
+All layer I/O should treat `session_metadata` as the source of truth. Design data flow accordingly. Example pattern:
+> The `evaluate` layer compresses `student_reasoning` across message turns → writes it into the metadata for that approach → `ground_layer` reads `student_reasoning` from metadata as its input.
+
+Apply this pattern consistently across all layers.
+
+---
+
+### 5. Implement Progress Calculation on Submission
+Write the logic to calculate how much **progress** is added (or subtracted) when a student makes a submission.

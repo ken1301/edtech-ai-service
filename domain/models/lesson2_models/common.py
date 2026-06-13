@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Tuple
+from typing import Any, Tuple
 from pydantic import BaseModel
 
 
@@ -46,8 +46,19 @@ class ResponseClass(str, Enum):
     EMPATHY = "EMPATHY"
     REFUSE_ANSWER_REQ = "REFUSE_ANSWER_REQ"
     SAFETY_HANDOFF = "SAFETY_HANDOFF"
+    WRAP_UP = "WRAP_UP"
 
 
 class SubmissionData(BaseModel):
     status: bool
     is_process_farm: Tuple[bool, int]
+
+
+class Lesson2LayerUsage(BaseModel):
+    """Envelope returned by every lesson 2 layer: the layer's schema output plus token usage.
+
+    Defined here (no model dependencies) so every layer/model module can re-export it
+    without creating import cycles.
+    """
+    output: Any = None
+    usage: Any = None

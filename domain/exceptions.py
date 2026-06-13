@@ -90,6 +90,6 @@ class ChatBotUseCaseError(Exception):
     """Raised when there is an error in the chatbot use case."""
     pass
 
-class ExerciseSelectionUseCaseError(Exception):
+class ExerciseExtractionUseCaseError(Exception):
     """Raised when there is an error in the exercise selection use case."""
     pass

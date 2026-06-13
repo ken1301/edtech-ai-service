@@ -3,9 +3,8 @@ from typing import List, Optional
 from application.stateless_services.lesson2_service.layers.response_layer import ResponseLayer
 from application.stateless_services.lesson2_service.layers.state_writer_layer import StateWriterLayer
 
-from domain.models.overall_models.common import ProblemRole, Role
 from domain.models.lesson2_models.common import ResponseClass
-from domain.models.lesson2_models.decide import ResponseDirective
+from domain.models.lesson2_models.decide import ResponseDirective, ToneArbiterOutput
 from domain.models.lesson2_models.meta import Lesson2Request, SessionMetadata
 from domain.models.lesson2_models.classify import ClassifyOutput
 from domain.models.lesson2_models.response import ResponseInput
@@ -51,6 +50,7 @@ class SafetyDivert:
                 decide_output=None,
                 evaluate_output=None,
                 ground_output_if_submission=None,
+                request=request,
             )
 
             logger.info(
@@ -87,54 +87,18 @@ class SafetyDivert:
         session_metadata: SessionMetadata,
         history_msg: Optional[List[Message]],
     ) -> ResponseInput:
-        pass
-
-
-    #     recent_messages = list(history_msg or [])
-    #     if user_msg:
-    #         recent_messages = recent_messages + [Message(role=Role.USER, content=user_msg)]
-
-    #     current_problem = self._current_problem(session_metadata)
-    #     problem_role = current_problem.recommended_problem_role if current_problem else ProblemRole.REINFORCEMENT
-    #     response_input = ResponseInput(
-    #         problem_question=current_problem.question if current_problem else user_msg,
-    #         problem_role=problem_role,
-    #         response_directive=ResponseDirective(
-    #             response_class=ResponseClass.SAFETY_HANDOFF,
-    #             tone="empathetic",
-    #             depth="short",
-    #             must_not_reveal=["final_answer"],
-    #         ),
-    #         msg=user_msg,
-    #         recent_messages=recent_messages,
-    #         classify=classify_output,
-    #         current_problem_index=self._current_problem_index(session_metadata, current_problem),
-    #         is_submission=False,
-    #     )
-
-    #     response_usage = await self._response_layer.execute(response_input)
-    #     await self._state_writer_layer.execute(
-    #         session_metadata,
-    #         response_directive=response_input.response_directive,
-    #     )
-
-    #     return response_usage.output if isinstance(response_usage.output, str) else str(response_usage.output)
-
-    # @staticmethod
-    # def _current_problem(session_metadata: SessionMetadata):
-    #     if not session_metadata.problem_list:
-    #         return None
-
-    #     if session_metadata.current_problem_id is not None:
-    #         for problem in session_metadata.problem_list:
-    #             if problem.problem_id == session_metadata.current_problem_id:
-    #                 return problem
-
-    #     return session_metadata.problem_list[0]
-
-    # @staticmethod
-    # def _current_problem_index(session_metadata: SessionMetadata, current_problem) -> int:
-    #     try:
-    #         return session_metadata.problem_list.index(current_problem)
-    #     except ValueError:
-    #         return 0
+        directive = ResponseDirective(
+            response_class=ResponseClass.SAFETY_HANDOFF,
+            tone_arbiter=ToneArbiterOutput(
+                tone="empathetic",
+                depth="short",
+                must_not_reveal=["final_answer"],
+            ),
+            intervene=True,
+        )
+        return ResponseInput(
+            response_directive=directive,
+            classify=classify_output,
+            is_submission=request.is_submission,
+            recent_messages=list(history_msg or []),
+        )

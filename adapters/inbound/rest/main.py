@@ -12,6 +12,8 @@ project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from adapters.inbound.rest.chat_router import router as chat_router
+from adapters.inbound.rest.exercise_extraction_router import router as exercise_extraction_router
+
 from infrastructure.container import Container
 from infrastructure.observability.middleware import SocraticContextMiddleware
 from infrastructure.monitoring.metrics_middleware import MetricsMiddleware
@@ -23,7 +25,7 @@ setup_logging()
 
 container = Container()
 container.wire(modules=["adapters.inbound.rest.chat_router"])
-
+container.wire(modules=["adapters.inbound.rest.exercise_extraction_router"])
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -62,7 +64,7 @@ app.mount("/metrics", metrics_app)
 
 app.container = container
 app.include_router(chat_router, prefix="/chat")
-
+app.include_router(exercise_extraction_router, prefix="/exercise")
 
 @app.get("/health")
 async def health_check():

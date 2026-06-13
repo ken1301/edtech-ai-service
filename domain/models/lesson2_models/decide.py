@@ -2,8 +2,31 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 from domain.models.overall_models.common import ProblemRole
-from domain.models.lesson2_models.common import Phase, ResponseClass
-from domain.models.lesson2_models.evaluate import AffectiveState
+from domain.models.lesson2_models.common import Phase, ResponseClass, Lesson2LayerUsage
+from domain.models.lesson2_models.classify import ClassifyOutput
+from domain.models.lesson2_models.evaluate import EvaluateOutput
+from domain.models.lesson2_models.ground import GroundOutput
+
+
+class DecideInput(BaseModel):
+    session_id: Optional[str] = None
+
+    # Upstream layer outputs
+    classify_output: Optional[ClassifyOutput] = None
+    ground_output: Optional[GroundOutput] = None
+    evaluate_output: EvaluateOutput
+
+    # Flow context (from session_metadata — source of truth)
+    is_submission: bool = False
+    result_status: Optional[bool] = None  # correctness from NestJS (submission only)
+    phase: Phase
+    problem_role: Optional[ProblemRole] = None
+    problem_index: int = 0
+    total_problems: int = 4
+    attempts_made: int = 0
+    max_attempts: int = 3
+    current_progress: float = 0.0
+    abuse_flags: List[str] = Field(default_factory=list)
 
 
 class ToneArbiterOutput(BaseModel):
@@ -12,33 +35,13 @@ class ToneArbiterOutput(BaseModel):
     must_not_reveal: List[str] = Field(default_factory=list)
 
 
-DecideOutput = ToneArbiterOutput
-
-
-class DecideInput(BaseModel):
-    response_class: ResponseClass
-    phase: Phase
-    problem_role: ProblemRole
-    affective: AffectiveState
-    attempts_on_current_approach: int
-    max_attempts_per_approach: int
-    approaches_tried: int
-    max_approached_per_problem: int
-    critical_false_positive: bool = False
-
-
-ToneDecideInput = DecideInput
-
-
 class ResponseDirective(BaseModel):
     response_class: ResponseClass
-    tone: Literal["peer", "peer_soft", "empathetic", "firm"]
-    depth: Literal["one_line", "short", "medium"]
-    must_not_reveal: List[str] = Field(default_factory=list)
+    tone_arbiter: ToneArbiterOutput
     advance: bool = False
-    advance_after_ack: bool = False
-    critical_false_positive: bool = False
-    offer_skip: bool = False
-    references_problem_id: Optional[int] = None
-    target_phase_to_probe: Optional[Phase] = None
-    farming_callout: bool = False
+    intervene: bool = False
+    rationale: str = ""
+
+
+class DecideOutput(BaseModel):
+    directive: ResponseDirective

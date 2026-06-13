@@ -6,7 +6,6 @@ from pymongo.errors import PyMongoError
 from domain.ports.profile_store_port import ProfileStorePort
 from domain.models.overall_models.profile import (
     StudentProfile,
-    TopicMastery,
     StudentPreference,
     LearningDetail
 )
@@ -32,7 +31,9 @@ class MongoProfileAdapter(ProfileStorePort):
         "preferences": {StudentPreference fields},
         "knowledge_map": {
             "math": {
-                "fractions": {TopicMastery fields},
+                "fractions": {
+                    "addition": {LearningDetail fields},
+                },
                 ...
             },
             "physics": { ... },
@@ -188,8 +189,11 @@ class MongoProfileAdapter(ProfileStorePort):
             ),
             knowledge_map={
                 subject: {
-                    topic: TopicMastery(**mastery)
-                    for topic, mastery in topics.items()
+                    topic: {
+                        concept: LearningDetail(**detail)
+                        for concept, detail in concepts.items()
+                    }
+                    for topic, concepts in topics.items()
                 }
                 for subject, topics in doc.get("knowledge_map", {}).items()
             },

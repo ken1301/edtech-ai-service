@@ -13,12 +13,10 @@ from domain.models.overall_models.common import (
     ConceptType
 )
 
-
 class ExercisePattern(BaseModel):
     cognitive_operation: List[CognitiveOperation]
     representation: List[Representation]
     constraints: List[Constraint]
-
 
 class Approach(BaseModel):
     summary: str
@@ -33,17 +31,21 @@ class Approach(BaseModel):
     strengths: List[ApproachStrength]
     weaknesses: List[ApproachWeakness]
 
+    max_attempts: int
+
 
 class Problem(BaseModel):
     problem_id: int
     question: str
-    attachment_url: Optional[str] = None
+    attachment_url: List[str] = [] # image URLs or other resource links
 
     approach_list: List[Approach]
     final_answer: str
 
     open_approach: bool
     recommended_problem_role: ProblemRole
+
+    max_approach_trial: int
 
 
 class Exercise(BaseModel):
@@ -53,6 +55,7 @@ class Exercise(BaseModel):
     topic: Topic
     concept: Concept
 
+    user_id: Optional[str] = None
 
 class Lesson2Exercises(BaseModel):
     problem_set: Dict[ProblemRole, List[Problem]]

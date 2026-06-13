@@ -2,7 +2,7 @@ from application.stateless_services.prompt_builder import PromptBuilder
 from application.stateless_services.llm_manager import LLMManager
 
 from domain.models.lesson2_models.ground import GroundInput, GroundOutput
-from domain.models.lesson2_models.ground import Lesson2LayerUsage
+from domain.models.lesson2_models.common import Lesson2LayerUsage
 
 from domain.exceptions import Lesson2LayerError, LLMManagerError
 
@@ -17,17 +17,19 @@ class GroundLayer:
 
     async def execute(self, input: GroundInput) -> Lesson2LayerUsage:
         try:
-            prompt = await self._prompt_builder.lesson2_ground_submission_prompt(**input.model_dump())
             logger.debug(
                 "ground_layer.called",
                 log_type="debug",
-                session_id=input.session_id,
             )
+
+            prompt = await self._prompt_builder.lesson2_ground_submission_prompt(**input.model_dump())
             llm_response = await self._llm_manager.generate_response(
                 system_prompt=prompt,
                 messages=[],
                 response_model=GroundOutput,
             )
+
+
             return Lesson2LayerUsage(output=llm_response.content, usage=llm_response.usage)
 
         except LLMManagerError as e:
@@ -37,7 +39,6 @@ class GroundLayer:
             logger.error(
                 "ground_layer.unexpected.failed",
                 log_type="error",
-                session_id=input.session_id,
                 error=str(e),
                 exc_info=True,
             )

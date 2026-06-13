@@ -3,10 +3,9 @@ from typing import Dict, List, Optional
 from application.stateless_services.lesson2_service.layers.response_layer import ResponseLayer
 from application.stateless_services.lesson2_service.layers.state_writer_layer import StateWriterLayer
 
-from domain.models.overall_models.common import ProblemRole, Role
 from domain.models.lesson2_models.common import ResponseClass
 from domain.models.lesson2_models.classify import ClassifyOutput, Intent
-from domain.models.lesson2_models.decide import ResponseDirective
+from domain.models.lesson2_models.decide import ResponseDirective, ToneArbiterOutput
 from domain.models.lesson2_models.meta import SessionMetadata, Lesson2Request
 from domain.models.lesson2_models.response import ResponseInput
 from domain.models.overall_models.message import Message
@@ -50,6 +49,7 @@ class FastPathReply:
                 decide_output=None,
                 evaluate_output=None,
                 ground_output_if_submission=None,
+                request=request,
             )
 
             logger.info(
@@ -85,6 +85,29 @@ class FastPathReply:
         session_metadata: SessionMetadata,
         history_msg: Optional[List[Message]] = None,
     ) -> ResponseInput:
-        pass
+        # Map the non-learning intent to a response class; all use the non-learning prompt.
+        if classify_output.intent == Intent.META_QUERY:
+            response_class = ResponseClass.META_REPLY
+        elif classify_output.intent in (Intent.EMOTIONAL_EXPRESSION, Intent.GIVE_UP):
+            response_class = ResponseClass.EMPATHY
+        elif classify_output.intent == Intent.ANSWER_EXTRACTION:
+            response_class = ResponseClass.REFUSE_ANSWER_REQ
+        else:
+            response_class = ResponseClass.META_REPLY
+
+        directive = ResponseDirective(
+            response_class=response_class,
+            tone_arbiter=ToneArbiterOutput(
+                tone="peer",
+                depth="one_line",
+                must_not_reveal=["final_answer"],
+            ),
+        )
+        return ResponseInput(
+            response_directive=directive,
+            classify=classify_output,
+            is_submission=request.is_submission,
+            recent_messages=list(history_msg or []),
+        )
 
     
