@@ -35,6 +35,9 @@ class ResponseLayer:
             )
 
             context = input.model_dump()
+            # `phase` is passed explicitly to the phase-prompt selector; drop it from the
+            # context kwargs so it isn't supplied twice (TypeError on the learning path).
+            context.pop("phase", None)
             prompt = await self._select_prompt(response_class, phase or input.phase, context)
 
             llm_response = await self._llm_manager.generate_response(

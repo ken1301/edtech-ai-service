@@ -5,6 +5,7 @@ from domain.models.lesson2_models.common import (
     ResponseClass,
     DisengagementLevel,
     DistressLevel,
+    ProcessState,
     Lesson2LayerUsage,
 )
 from domain.models.lesson2_models.decide import (
@@ -106,6 +107,8 @@ class DecideLayer:
             return ResponseClass.REDIRECT_TO_SUBMIT, False, False
 
         # --- Non-submission chat ---
+        evaluate = input.evaluate_output
+
         if classify is not None:
             if classify.intent == Intent.META_QUERY:
                 return ResponseClass.META_REPLY, False, False
@@ -113,12 +116,26 @@ class DecideLayer:
                 return ResponseClass.EMPATHY, False, False
 
         # high frustration during discussion -> empathy first
-        if input.evaluate_output.affect.frustration >= 0.7:
+        if evaluate.affect.frustration >= 0.7:
             return ResponseClass.EMPATHY, False, False
 
         # stuck and out of attempts mid-discussion -> soft intervention
-        if input.evaluate_output.stuck and input.attempts_made >= input.max_attempts:
+        if evaluate.stuck and input.attempts_made >= input.max_attempts:
             return ResponseClass.SOFT_INTERVENTION, False, True
+
+        # abandoning an approach that still had room (not yet at the attempt limit, and the
+        # process wasn't actually failing) -> warn before the switch wastes the remaining tries.
+        if (
+            evaluate.approach_switched
+            and input.attempts_made < input.max_attempts
+            and evaluate.process_state not in (ProcessState.WRONG_STAGNANT, ProcessState.WRONG_DECLINING)
+        ):
+            return ResponseClass.APPROACH_SWITCH_WARNING, False, False
+
+        # converged / very close on a non-submission turn -> redirect them to actually submit
+        # (progress only moves on submission, §1.6) instead of endlessly discussing.
+        if evaluate.process_state == ProcessState.CONVERGED or evaluate.solution_proximity >= 0.85:
+            return ResponseClass.REDIRECT_TO_SUBMIT, False, False
 
         # default learning discussion -> probe the student's current step
         return ResponseClass.PROBE_INTERMEDIATE_PHASE, False, False

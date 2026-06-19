@@ -93,7 +93,7 @@ class ChatbotUseCase:
                     content="This session has expired. System is syncing data and closing the session. Please start a new session to continue.",
                     usage=None,
                     correlation_id=correlation_id,
-                    current_process=metadata.current_process,
+                    current_progress=metadata.current_progress,
                 )
 
             if metadata.turn_count > self.TURN_THRESHOLD: 
@@ -116,7 +116,7 @@ class ChatbotUseCase:
 
             await self._session_manager.redis_save_metadata(session_id, updated_metadata)
 
-            user_msg_obj = Message(role=Role.USER, content=request.message)
+            user_msg_obj = Message(role=Role.USER, content=request.user_msg)
             assistant_msg_obj = Message(role=Role.ASSISTANT, content=response_content)
             await self._session_manager.redis_save_turn(
                 session_id=session_id,
@@ -134,7 +134,7 @@ class ChatbotUseCase:
                 content=response_content,
                 usage=token_usage,
                 correlation_id=correlation_id,
-                current_process=updated_metadata.current_process,
+                current_progress=updated_metadata.current_progress,
             )
             
         except (

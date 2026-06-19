@@ -30,7 +30,7 @@ async def chat(
             subject=request.subject,
             topic=request.topic,
             concept=request.concept,
-            background_tasks=background_tasks
+            background_task=background_tasks
         )
 
         return response
@@ -87,3 +87,5 @@ async def sync_and_close(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing chat: {str(e)}",
         )
+
+    

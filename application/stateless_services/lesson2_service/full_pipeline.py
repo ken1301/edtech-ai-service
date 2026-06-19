@@ -46,6 +46,12 @@ class FullPipeline:
         history_msg: Optional[List[Message]] = None,
     ) -> tuple[str, SessionMetadata, List]:
         try:
+            logger.debug(
+                "lesson2.full_pipeline.process.called",
+                log_type="debug",
+                session_id=session_metadata.session_id,
+            )
+
             all_token_usage: List = []
 
             evaluate_input = self._build_evaluate_input(
@@ -77,12 +83,6 @@ class FullPipeline:
                 evaluate_output=evaluate_output,
                 ground_output_if_submission=ground_output,
                 request=request,
-            )
-
-            logger.info(
-                "full_pipeline.process.completed",
-                log_type="info",
-                session_id=session_metadata.session_id,
             )
 
             content = response_layer_response.output
@@ -124,9 +124,11 @@ class FullPipeline:
             problem_question=problem.question if problem else "",
             problem_role=problem.recommended_problem_role if problem else None,
             open_approach=problem.open_approach if problem else False,
+            available_approaches=[a.summary for a in problem.approach_list] if problem else [],
             current_approach_id=state.current_approach_id if state else None,
             current_approach_reasoning=_current_reasoning(state),
             attempts_made=_attempts_made(state),
+            max_attempts=_max_attempts(problem),
             is_submission=request.is_submission,
             ground_verdict=ground_output.approach_verdict if ground_output else None,
             matched_weakness=ground_output.matched_weakness if ground_output else None,
@@ -176,6 +178,7 @@ class FullPipeline:
         history_msg: Optional[List[Message]],
     ) -> ResponseInput:
         problem = _current_problem(session_metadata)
+        state = _current_state(session_metadata)
         return ResponseInput(
             response_directive=decide_output.directive,
             phase=evaluate_output.phase,
@@ -183,9 +186,15 @@ class FullPipeline:
             problem_role=problem.recommended_problem_role if problem else None,
             problem_index=_problem_index(session_metadata),
             total_problems=len(session_metadata.problem_list) or TOTAL_PROBLEMS,
+            current_progress=session_metadata.current_progress,
             evaluate_summary=evaluate_output.summary,
             affect=evaluate_output.affect,
             student_reasoning=evaluate_output.student_reasoning_compressed,
+            process_state=evaluate_output.process_state,
+            solution_proximity=evaluate_output.solution_proximity,
+            stuck=evaluate_output.stuck,
+            attempts_made=_attempts_made(state),
+            max_attempts=_max_attempts(problem),
             is_submission=request.is_submission,
             ground_verdict=ground_output.approach_verdict if ground_output else None,
             matched_weakness=ground_output.matched_weakness if ground_output else None,

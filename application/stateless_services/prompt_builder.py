@@ -18,7 +18,7 @@ from infrastructure.logging import logger
 class PromptBuilder:
     """Builds legacy prompts and the lesson2 prompt set from template files."""
 
-    _BASE_DIR = Path(__file__).resolve().parent.parent / "docs"
+    _BASE_DIR = Path(__file__).resolve().parent.parent.parent / "domain" / "prompts"
     _LEGACY_PROMPT_TEMPLATE_DIR = _BASE_DIR / "prompt_templates"
     _LESSON2_PROMPT_TEMPLATE_DIR = _BASE_DIR / "lesson2_prompts"
 

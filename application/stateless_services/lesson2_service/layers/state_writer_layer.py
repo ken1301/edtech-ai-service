@@ -8,6 +8,7 @@ from domain.models.lesson2_models.evaluate import EvaluateOutput
 from domain.models.lesson2_models.ground import ApproachVerdict, GroundOutput
 from domain.models.lesson2_models.meta import (
     ApproachState,
+    EmotionalState,
     Misconception,
     PerProblemState,
     SessionMetadata,
@@ -100,6 +101,20 @@ class StateWriterLayer:
         # Affect history
         session_metadata.last_evaluate_summary = evaluate_output.summary
 
+        # Append this turn's perceived affect to the session emotion trajectory. Previously this
+        # list was declared but never written, so the affect history was silently lost.
+        affect = evaluate_output.affect
+        if affect is not None:
+            session_metadata.emotion_history.append(
+                EmotionalState(
+                    frustration=affect.frustration,
+                    engagement=affect.engagement,
+                    confidence=affect.confidence,
+                    disengagement_level=affect.disengagement_level.value,
+                    distress_level=affect.distress_level.value,
+                )
+            )
+
         # Misconceptions: merge perceived signals into the session list (dedup by description).
         existing = {m.description for m in session_metadata.misconception_list}
         for m in evaluate_output.misconceptions:
@@ -116,7 +131,24 @@ class StateWriterLayer:
             return
 
         problem_state.phase_history.append(evaluate_output.phase)
-        problem_state.current_approach_id = evaluate_output.current_approach_id
+
+        # If the student moved to a different approach, record the switch on the one they left
+        # (only if it wasn't already resolved) so the approach trajectory is auditable.
+        prev_id = problem_state.current_approach_id
+        new_id = evaluate_output.current_approach_id
+        if (
+            evaluate_output.approach_switched
+            and prev_id is not None
+            and prev_id != new_id
+            and 0 <= prev_id < len(problem_state.approach_list)
+        ):
+            left = problem_state.approach_list[prev_id]
+            if left.outcome == "active":
+                # Submitted at least once on this approach before leaving -> forced switch;
+                # otherwise the student chose to pivot on their own.
+                left.outcome = "switched_after_limit" if left.attempts_made > 0 else "switched_voluntarily"
+
+        problem_state.current_approach_id = new_id
 
         # Write the compressed running reasoning back onto the active approach so downstream
         # layers (e.g. Ground) read it from metadata next turn (spec Task 4 pattern).

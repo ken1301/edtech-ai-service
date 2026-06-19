@@ -33,6 +33,12 @@ class FastPathReply:
         history_msg: Optional[List[Message]] = None,
     ) -> str:
         try:
+            logger.debug(
+                "lesson2.fast_path_reply.process.called",
+                log_type="debug",
+                session_id=session_metadata.session_id,
+            )
+
             all_token_usage = []
             response_input = self._build_response_input(
                 request=request,
@@ -50,13 +56,6 @@ class FastPathReply:
                 evaluate_output=None,
                 ground_output_if_submission=None,
                 request=request,
-            )
-
-            logger.info(
-                "fast_path_reply.process.succeeded",
-                log_type="info",
-                session_id=session_metadata.session_id,
-                token_usage=all_token_usage,
             )
 
             return (
@@ -105,6 +104,7 @@ class FastPathReply:
         )
         return ResponseInput(
             response_directive=directive,
+            current_progress=session_metadata.current_progress,
             classify=classify_output,
             is_submission=request.is_submission,
             recent_messages=list(history_msg or []),

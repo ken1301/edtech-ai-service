@@ -37,10 +37,16 @@ class EvaluateInput(BaseModel):
     problem_role: Optional[ProblemRole] = None
     open_approach: bool = False
 
+    # Catalog of valid approaches for this problem, indexed by position (id).
+    # Summaries only — never approach_answer/final_answer (design rule #3) — so the
+    # layer can map the student's reasoning onto a concrete approach id.
+    available_approaches: List[str] = Field(default_factory=list)
+
     # Approach context carried across turns via metadata
     current_approach_id: Optional[int] = None
     current_approach_reasoning: str = ""
     attempts_made: int = 0
+    max_attempts: int = 3
 
     # Submission context — verdict only, never the raw final answer (design rule #3)
     is_submission: bool = False
@@ -63,6 +69,10 @@ class EvaluateOutput(BaseModel):
     process_state: ProcessState = ProcessState.DISCOVERING
     solution_proximity: float = 0.0
     stuck: bool = False
+
+    # True when the student appears to be abandoning their prior approach for a new one
+    # this turn (lets Decide raise APPROACH_SWITCH_WARNING before attempts are wasted).
+    approach_switched: bool = False
 
     # Compressed running reasoning for the active approach (written back to metadata)
     student_reasoning_compressed: str = ""

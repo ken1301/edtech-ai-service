@@ -15,6 +15,7 @@ class CloudManager:
     async def fetch_document(self, document_url: str) -> PDFDocument | ImageDocument | MarkdownDocument:
         """Fetch a document from cloud storage using its unique identifier."""
         try:
+            
             document = await self._cloud_port.download_document(document_url)
 
             logger.info(

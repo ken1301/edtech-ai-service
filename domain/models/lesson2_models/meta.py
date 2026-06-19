@@ -73,7 +73,10 @@ class EmotionalState(BaseModel):
     frustration: float
     engagement: float
     confidence: float
-    # can add more dimensions like risk, stuck, etc.
+    # Coarse engagement/distress bands carried from Evaluate's AffectiveState so the
+    # affect trajectory (not just the scalars) is preserved across the session.
+    disengagement_level: Optional[str] = None
+    distress_level: Optional[str] = None
 
 class Misconception(BaseModel):
     misconception_type: ConceptType
