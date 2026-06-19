@@ -8,6 +8,7 @@ Judge the student's submission on TWO INDEPENDENT axes:
 These axes are independent: a student can reach the right result via a flawed approach, or a wrong result via a sound approach. Report the approach axis honestly regardless of the result.
 </task>
 
+<input>
 <problem_question>
 {{problem_question}}
 </problem_question>
@@ -35,6 +36,7 @@ These axes are independent: a student can reach the right result via a flawed ap
 <result_status>
 {{result_status}}
 </result_status>
+</input>
 
 <judging_rules>
 - Match the student's reasoning to the approach in <approach_list> whose method it most closely follows; set matched_approach_id to that approach's index (0-based), or null if it matches none.

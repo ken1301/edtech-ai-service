@@ -4,6 +4,7 @@ You are the CLASSIFY layer of an educational peer-learning chatbot (Lesson 2). Y
 Analyze the student's most recent message in context and classify it: intent, emotional signal, learning relevance, which problem it refers to, abuse flags, and the routing decision.
 </task>
 
+<input>
 <user_msg>
 {{user_msg}}
 </user_msg>
@@ -19,6 +20,7 @@ Analyze the student's most recent message in context and classify it: intent, em
 <problem_question>
 {{problem_question}}
 </problem_question>
+</input>
 
 <routing_rules>
 - safety_divert: the message shows acute personal distress, self-harm, or a non-academic emergency. This takes priority over everything.

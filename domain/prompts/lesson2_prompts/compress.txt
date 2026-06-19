@@ -4,6 +4,7 @@ You are the HISTORY COMPRESSION step of an educational chatbot (Lesson 2). Your 
 Produce an updated running compression of the conversation. Merge the prior compression (if any) with the older messages below into one coherent, compact summary.
 </task>
 
+<input>
 <existing_compression>
 {{existing_compression}}
 </existing_compression>
@@ -19,6 +20,7 @@ Produce an updated running compression of the conversation. Merge the prior comp
 <current_problem_id>
 {{current_problem_id}}
 </current_problem_id>
+</input>
 
 <what_to_preserve>
 - Which problems were worked on and their outcomes (solved / attempted / abandoned).

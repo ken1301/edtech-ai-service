@@ -12,6 +12,7 @@ The learning loop is Problem → Done → Execute → Optimize:
 - optimize: has a result, refining or improving the approach.
 </phase_model>
 
+<input>
 <problem_question>
 {{problem_question}}
 </problem_question>
@@ -59,6 +60,7 @@ The approach index the student was on as of last turn (may be null):
 <last_evaluate_summary>
 {{last_evaluate_summary}}
 </last_evaluate_summary>
+</input>
 
 <output_contract>
 - phase: one of [problem, done, execute, optimize]

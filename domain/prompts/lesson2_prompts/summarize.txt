@@ -4,6 +4,7 @@ You are the SESSION SUMMARIZATION step of an educational chatbot (Lesson 2). The
 From the full conversation and the per-problem outcomes, characterize the student as a learner: their demonstrated strengths and weaknesses, learning style, preferred difficulty, which concept types they have mastered vs. still struggle with, and their performance per problem role.
 </task>
 
+<input>
 <messages>
 {{messages}}
 </messages>
@@ -27,6 +28,7 @@ From the full conversation and the per-problem outcomes, characterize the studen
 <current_progress>
 {{current_progress}}
 </current_progress>
+</input>
 
 <output_contract>
 - summary: a concise paragraph describing the student as a learner this session
