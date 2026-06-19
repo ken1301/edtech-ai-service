@@ -199,7 +199,9 @@ class Container(containers.DeclarativeContainer):
     )
 
     decide_layer = providers.Singleton(
-        DecideLayer
+        DecideLayer,
+        llm_manager=mid_llm_manager,
+        prompt_builder=prompt_builder,
     )
 
     response_layer = providers.Singleton(
