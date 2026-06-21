@@ -108,6 +108,8 @@ Lesson 2 builds directly on Lesson 1 (the student's self-study foundation for th
 </instructions>
 
 <rules>
+  <rule>If lesson1_summary is provided, the REINFORCEMENT problem must be solvable using only the knowledge and skills from that summary; do not require un-taught knowledge.</rule>
+  <rule>Must have at least 8 problems in total across all 4 problem roles (REINFORCEMENT, CHALLENGE, EXPLORATION, EXTENSION).</rule>
   <rule>Never omit an existing approach from the source markdown.</rule>
   <rule>Never invent a problem that is not present in the source.</rule>
   <rule>All enum fields must use the exact lowercase string values listed in the schema.</rule>

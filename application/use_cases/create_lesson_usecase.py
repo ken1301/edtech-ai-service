@@ -13,8 +13,8 @@ from application.stateless_services.docs_transform import PDFToMarkdownTransform
 from domain.models.lesson2_models.exercise import Exercise, Lesson2Exercises
 from domain.models.overall_models.document import ImageDocument, MarkdownDocument
 from domain.models.overall_models.curriculum import Subject, Topic, Concept
-from domain.models.overall_models.response import Lesson2ExerciseExtractionResponse
-from domain.models.overall_models.lesson1 import Lesson1CreationOutput, Lesson1CreationResponse, CreateLessonMetadata
+from domain.models.overall_models.response import Lesson2ExerciseExtractionResponse, Lesson1CreationResponse
+from domain.models.overall_models.lesson1 import Lesson1CreationOutput, CreateLessonMetadata
 
 from domain.exceptions import (
     LLMManagerError,
@@ -78,7 +78,7 @@ class CreateLessonUseCase:
                     )
                 else:
                     for image in image_set:
-                        image_url = await self._cloud_manager.upload_document(image_document=image)
+                        image_url = await self._cloud_manager.upload_document(document=image)
 
                         # Replace the local image reference in the Markdown content with the uploaded image URL
                         content = markdown_document.content.replace(image.filename, image_url)
@@ -86,6 +86,7 @@ class CreateLessonUseCase:
             previous_lessons = []
             lesson1_creation_input = {
                 "content": content,
+                "knowledge_content_language": "Vietnamese",
                 "subject": subject,
                 "topic": topic,
                 "concept": concept,
@@ -102,7 +103,7 @@ class CreateLessonUseCase:
 
             lesson_creation_metadata = CreateLessonMetadata(
                 lesson_id=lesson_id,
-                summary=lesson1_creation_output.summary
+                lesson1_summary=lesson1_creation_output.summary
             )
             await self._lesson_manager.save_lesson_creation_metadata(
                 lesson_id=lesson_id,
@@ -164,13 +165,17 @@ class CreateLessonUseCase:
                     )
                 else:
                     for image in image_set:
-                        image_url = await self._cloud_manager.upload_document(image_document=image)
+                        image_url = await self._cloud_manager.upload_document(document=image)
 
                         # Replace the local image reference in the Markdown content with the uploaded image URL
                         content = markdown_document.content.replace(image.filename, image_url)
 
             lesson_creation_metadata = await self._lesson_manager.get_lesson_creation_metadata(lesson_id=lesson_id)
-            lesson1_summary = lesson_creation_metadata.summary if lesson_creation_metadata else "No summary available."
+            lesson1_summary = (
+                getattr(lesson_creation_metadata, "lesson1_summary", None)
+                or getattr(lesson_creation_metadata, "summary", None)
+                or "No summary available."
+            )
 
             # 3. Build a prompt for the chat service using the Markdown content then send it to the chat service.
             lesson2_exercise_extraction_input = {
