@@ -21,7 +21,7 @@ from domain.exceptions import AuthorizationError, ChatBotUseCaseError, ProblemSe
 
 router = APIRouter()
 
-@router.post("", response_model=Lesson2ChatResponse)
+@router.post("/chat", response_model=Lesson2ChatResponse)
 @inject
 async def chat(
     request: ChatRequest,
