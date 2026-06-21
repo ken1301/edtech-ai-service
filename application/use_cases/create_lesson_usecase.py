@@ -248,6 +248,12 @@ class CreateLessonUseCase:
                 metadata=lesson_creation_metadata,
             )
 
+            await self._lesson_manager.save_exercise(
+                exercise_id=lesson_id,
+                user_id=user_id,
+                exercise=formatted_exercises
+            )
+
             logger.info(
                 "create_lesson2.completed",
                 log_type="business",

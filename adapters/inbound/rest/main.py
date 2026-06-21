@@ -4,7 +4,8 @@ import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import make_asgi_app
 import uvicorn
@@ -80,6 +81,20 @@ app.add_middleware(
     allow_headers=["X-Correlation-ID", "Content-Type", "Authorization", "X-API-Key"],
     expose_headers=["X-Correlation-ID"],
 )
+
+@app.middleware("http")
+async def verify_api_key(request: Request, call_next):
+    # Cho phép truy cập công khai vào các endpoint kiểm tra sức khoẻ và tài liệu
+    if request.url.path in ["/docs", "/redoc", "/openapi.json", "/health", "/metrics"]:
+        return await call_next(request)
+        
+    api_key = request.headers.get("X-API-Key")
+    expected_key = os.getenv("INTERNAL_API_KEY", "socratic_internal_secret_key")
+    
+    if api_key != expected_key:
+        return JSONResponse(status_code=403, content={"detail": "Forbidden: Invalid or missing X-API-Key. Only Backend can access."})
+        
+    return await call_next(request)
 
 # Mount Prometheus metrics endpoint
 metrics_app = make_asgi_app()

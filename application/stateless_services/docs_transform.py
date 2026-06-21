@@ -1,8 +1,7 @@
 from io import BytesIO
 
-from marker.converters.pdf import PdfConverter
-from marker.models import create_model_dict
-from marker.output import text_from_rendered
+import fitz
+import pymupdf4llm
 
 from domain.models.overall_models.document import PDFDocument, MarkdownDocument, ImageDocument
 
@@ -20,24 +19,14 @@ class PDFToMarkdownTransformer:
         """Main method to transform a PDF document into Markdown format, extracting text and images as needed."""
 
         try:
-            # 1. Convert PDF bytes using marker's expected converter configuration.
-            converter = PdfConverter(artifact_dict=create_model_dict())
-            rendered_document = converter(BytesIO(pdf_document.content))
+            # 1. Load PDF from bytes using PyMuPDF (fitz)
+            doc = fitz.open(stream=pdf_document.content, filetype="pdf")
 
-            # 2. Extract markdown text and rendered images from the converted document.
-            markdown_content, _, rendered_images = text_from_rendered(rendered_document)
+            # 2. Extract markdown text using pymupdf4llm
+            markdown_content = pymupdf4llm.to_markdown(doc)
+            
+            # (Optional) Image extraction can be added later if needed. For now, empty list saves RAM.
             image_set: list[ImageDocument] = []
-            for index, (image_name, image) in enumerate(rendered_images.items()):
-                image_buffer = BytesIO()
-                image.save(image_buffer, format="PNG")
-                image_set.append(
-                    ImageDocument(
-                        id=f"{pdf_document.id}_{index}",
-                        filename=image_name,
-                        content=image_buffer.getvalue(),
-                        parent_pdf_id=pdf_document.id,
-                    )
-                )
 
             markdown_document = MarkdownDocument(
                 id=pdf_document.id,

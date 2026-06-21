@@ -37,6 +37,18 @@ from application.use_cases.chatbot_usecase import ChatbotUseCase
 from application.use_cases.create_lesson_usecase import CreateLessonUseCase
 from infrastructure.config import Settings
 
+def create_mongo_client(config: Settings) -> AsyncIOMotorClient:
+    url = config.LOCAL_MONGO_URL
+    if url.startswith("mongodb+srv://"):
+        return AsyncIOMotorClient(url)
+    return AsyncIOMotorClient(
+        url,
+        username=config.MONGO_USER,
+        password=config.MONGO_PASSWORD,
+        port=config.MONGO_PORT,
+        authSource="admin",
+    )
+
 class Container(containers.DeclarativeContainer):
     """Dependency injection container for managing application components and their dependencies"""
 
@@ -53,12 +65,8 @@ class Container(containers.DeclarativeContainer):
     )
 
     mongo_client = providers.Singleton(
-        AsyncIOMotorClient,
-        config.provided.LOCAL_MONGO_URL,
-        username=config.provided.MONGO_USER,
-        password=config.provided.MONGO_PASSWORD,
-        port=config.provided.MONGO_PORT,
-        authSource="admin",
+        create_mongo_client,
+        config=config.provided,
     )
 
     s3_client = providers.Singleton(
