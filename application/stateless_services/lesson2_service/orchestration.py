@@ -10,7 +10,7 @@ from domain.models.lesson2_models.classify import ClassifyInput, ClassifyOutput,
 from domain.models.lesson2_models.ground import GroundInput, GroundOutput
 from domain.models.lesson2_models.meta import SessionMetadata, Lesson2Request
 from domain.models.overall_models.message import Message
-from domain.models.overall_models.response import TokenUsage
+from domain.models.overall_models.token_usage import TokenUsage
 
 from domain.exceptions import Lesson2PipelineError, Lesson2OrchestrationError
 

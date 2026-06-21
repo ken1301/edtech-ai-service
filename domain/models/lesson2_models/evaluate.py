@@ -67,7 +67,7 @@ class EvaluateOutput(BaseModel):
     # Approach / learning signals
     current_approach_id: Optional[int] = None
     process_state: ProcessState = ProcessState.DISCOVERING
-    solution_proximity: float = 0.0
+    solution_proximity: float = 0.0 # khoảng cách từ solution hiện tại đến solution đúng, 0.0 (xa) .. 1.0 (gần)
     stuck: bool = False
 
     # True when the student appears to be abandoning their prior approach for a new one

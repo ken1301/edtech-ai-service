@@ -51,7 +51,7 @@ class ResponseClass(str, Enum):
 
 class SubmissionData(BaseModel):
     status: bool
-    is_process_farm: Tuple[bool, int]
+    is_progress_farm: Tuple[bool, int]
 
 
 class Lesson2LayerUsage(BaseModel):

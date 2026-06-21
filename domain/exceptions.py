@@ -48,11 +48,11 @@ class Lesson2LayerError(Exception):
     pass
 
 # === Exercise-related exceptions ===
-class ExerciseStoreError(Exception):
+class LessonStoreError(Exception):
     """Raised when there is an error interacting with the exercise store."""
     pass
 
-class ExerciseManagerError(Exception):
+class LessonManagerError(Exception):
     """Raised when there is an error in exercise management operations."""
     pass    
 
@@ -90,6 +90,6 @@ class ChatBotUseCaseError(Exception):
     """Raised when there is an error in the chatbot use case."""
     pass
 
-class ExerciseExtractionUseCaseError(Exception):
+class CreateLessonUseCaseError(Exception):
     """Raised when there is an error in the exercise selection use case."""
     pass

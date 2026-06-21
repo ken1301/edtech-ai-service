@@ -22,6 +22,11 @@ class PromptBuilder:
     _LEGACY_PROMPT_TEMPLATE_DIR = _BASE_DIR / "prompt_templates"
     _LESSON2_PROMPT_TEMPLATE_DIR = _BASE_DIR / "lesson2_prompts"
 
+    # === Lesson 1 Prompts ===
+    LESSON1_DOCUMENT_EXTRACTION_PROMPT = (_LEGACY_PROMPT_TEMPLATE_DIR / "lesson1_document_extraction.txt").read_text(encoding="utf-8")
+
+
+    # === Lesson 2 Prompts ===
     LESSON2_EXERCISE_EXTRACTION_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "lesson2_exercise_extraction.txt").read_text(encoding="utf-8")
     LESSON2_COMPRESS_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "compress.txt").read_text(encoding="utf-8")
     LESSON2_SUMMARIZE_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "summarize.txt").read_text(encoding="utf-8")
@@ -119,6 +124,29 @@ class PromptBuilder:
             )
             raise PromptGenerationError("Failed to generate classify prompt.") from e
 
+    # === Lesson 1 Prompts ===
+    async def lesson1_document_extraction_prompt(self, **context: Any) -> str:
+        try:
+            return self._render_template(self.LESSON1_DOCUMENT_EXTRACTION_PROMPT, **context)
+        except (ValueError, TypeError) as e:
+            logger.error(
+                "prompt_builder.document_extraction_prompt.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate document extraction prompt.") from e
+        except Exception as e:
+            logger.error(
+                "prompt_builder.document_extraction_prompt.unexpected.failed",
+                log_type="error",
+                error=str(e),
+                exc_info=True,
+            )
+            raise PromptGenerationError("Failed to generate document extraction prompt.") from e
+
+        
+    # === Lesson 2 Prompts ===
     async def lesson2_ground_submission_prompt(self, **context: Any) -> str:
         try:
             return self._render_template(self.LESSON2_GROUND_SUBMISSION_PROMPT, **context)

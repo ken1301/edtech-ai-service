@@ -11,8 +11,8 @@ import uvicorn
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from adapters.inbound.rest.chat_router import router as chat_router
-from adapters.inbound.rest.exercise_extraction_router import router as exercise_extraction_router
+from adapters.inbound.rest.lesson2_router import router as lesson2_router
+from adapters.inbound.rest.create_lesson_router import router as create_lesson_router
 
 from infrastructure.container import Container
 from infrastructure.observability.middleware import SocraticContextMiddleware
@@ -24,8 +24,8 @@ load_dotenv()
 setup_logging()
 
 container = Container()
-container.wire(modules=["adapters.inbound.rest.chat_router"])
-container.wire(modules=["adapters.inbound.rest.exercise_extraction_router"])
+container.wire(modules=["adapters.inbound.rest.lesson2_router"])
+container.wire(modules=["adapters.inbound.rest.create_lesson_router"])
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
         pass
 
 
-app = FastAPI(title="Socratic AI Chat API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title=" AI Service API", version="1.0.0", lifespan=lifespan)
 
 # Add observability middleware
 app.add_middleware(MetricsMiddleware)
@@ -63,8 +63,8 @@ metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)
 
 app.container = container
-app.include_router(chat_router, prefix="/chat")
-app.include_router(exercise_extraction_router, prefix="/exercise")
+app.include_router(lesson2_router, prefix="/lesson2", tags=["Lesson 2"])
+app.include_router(create_lesson_router, prefix="/create-lesson", tags=["Create Lesson"])
 
 @app.get("/health")
 async def health_check():

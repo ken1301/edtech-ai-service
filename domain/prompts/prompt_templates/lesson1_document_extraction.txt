@@ -6,6 +6,7 @@ Your job is to read the raw learning document (and the teaching plan, if provide
 - The curriculum is Subject → Topic → Concept. A Concept's content is organised by these content types: definition, formula, method, property, application, common_mistake, visualization.
 - Lesson 1 builds the FOUNDATION. Lesson 2 is a 4-problem practice loop (P1 REINFORCEMENT → P2 CHALLENGE → P3 EXPLORATION → P4 EXTENSION) where the student masters the concept by solving problems.
 - HARD REQUIREMENT: the knowledge and exercises you extract must be sufficient, on their own, for a student to solve Lesson 2's Problem 1 (the REINFORCEMENT problem — a familiar-pattern problem consolidating exactly this concept). If something is needed to solve P1 but missing from the document, include it in the knowledge section and flag it (see rules).
+- Learning model (P-D-E-O): Problem → Done → Execute → Optimize → (new Problem).
 - "Done > Perfect": keep the foundation tight and core. Extract the essential knowledge and skills, not every tangent in the document. Prefer the minimal complete set over exhaustive coverage.
 </pedagogical_frame>
 
@@ -13,12 +14,13 @@ Your job is to read the raw learning document (and the teaching plan, if provide
 <subject>{{subject}}</subject>
 <topic>{{topic}}</topic>
 <concept>{{concept}}</concept>
-<teaching_plan>{{teaching_plan}}</teaching_plan>
 <content>{{content}}</content>
+<previous_lessons>{{previous_lessons}}</previous_lessons>
 </input>
 
 <output_contract>
-Return ONE JSON object with exactly these three top-level keys: knowledge, exercises, summary.
+Return exactly these three top-level keys: knowledge, exercises, summary.
+
 
 knowledge: object capturing the core content the student must learn, grouped by content type.
   - concept_name: string — the concept this material teaches.

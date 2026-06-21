@@ -24,7 +24,7 @@ class RedisSessionAdapter(SessionStorePort):
         session:{session_id}:messages  — List   (JSON-encoded Message objects)
 
     The messages list is treated as a deque:
-        - RPUSH             → append new turns to the right (newest)
+        - RPUSH             → append new  turns to the right (newest)
         - LRANGE(0, N-1)    → get the N oldest  (left)
         - LRANGE(-N, -1)    → get the N newest  (right)
         - LTRIM(N, -1)      → drop the N oldest (left)

@@ -1,14 +1,9 @@
 from pydantic import BaseModel
-from typing import Optional, Dict, Any, Union, List
+from typing import Dict, Any, Union, List
 
 from domain.models.lesson2_models.exercise import Exercise
-
-class TokenUsage(BaseModel):
-    prompt_tokens: int
-    completion_tokens: int
-    total_tokens: int
-    estimated_cost: Optional[float] = None
-
+from domain.models.overall_models.lesson1 import Lesson1CreationOutput
+from domain.models.overall_models.token_usage import TokenUsage
 
 class LLMResponse(BaseModel):
     content: Union[str, BaseModel]
@@ -16,6 +11,10 @@ class LLMResponse(BaseModel):
     finish_reason: str
     usage: TokenUsage
 
+class Lesson1CreationResponse(BaseModel):
+    output: Lesson1CreationOutput
+    usage: TokenUsage
+    correlation_id: str
 
 class Lesson2ChatResponse(BaseModel):
     content: str
@@ -23,8 +22,7 @@ class Lesson2ChatResponse(BaseModel):
     correlation_id: str
     current_progress: float
 
-
-class ExerciseExtractionResponse(BaseModel):
+class Lesson2ExerciseExtractionResponse(BaseModel):
     output: Exercise
     usage: TokenUsage
     correlation_id: str

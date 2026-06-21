@@ -8,11 +8,23 @@ from domain.models.overall_models.curriculum import Subject, Topic, Concept
 
 ChatRequest = Lesson2Request
 
+class DocumentExtractionRequest(BaseModel):
+    user_id: str
+    correlation_id: str
+    lesson_id: str
+
+    document_url: Optional[str] = None
+    
+    subject: Subject
+    topic: Topic
+    concept: Concept
+    
 class ExerciseExtractionRequest(BaseModel):
     user_id: str
     correlation_id: str
+    lesson_id: str
 
-    document_url: str
+    document_url: Optional[str] = None
 
     subject: Subject
     topic: Topic

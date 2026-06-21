@@ -4,14 +4,15 @@ import redis.asyncio as aioredis
 from motor.motor_asyncio import AsyncIOMotorClient
 import boto3
 
-from adapters.outbound.cache.redis_adapter import RedisSessionAdapter
+from adapters.outbound.cache.redis_lesson_adapter import RedisLessonAdapter
+from adapters.outbound.cache.redis_session_adapter import RedisSessionAdapter
 from adapters.outbound.llm.factory import llm_factory
 from adapters.outbound.persistence.mongo_profile_store import MongoProfileAdapter
 from adapters.outbound.persistence.mongo_session_store import MongoSessionAdapter
 from adapters.outbound.persistence.mongo_exercise_store import MongoExerciseAdapter
 from adapters.outbound.docs_storage.s3_adapter import S3Adapter
 
-from application.services.exercise_manager import ExerciseManager
+from application.services.lesson_manager import LessonManager
 from application.stateless_services.adaptive_learning_service import AdaptiveLearningService
 from application.stateless_services.docs_transform import PDFToMarkdownTransformer
 from application.stateless_services.prompt_builder import PromptBuilder
@@ -33,13 +34,13 @@ from application.stateless_services.lesson2_service.full_pipeline import FullPip
 from application.stateless_services.lesson2_service.orchestration import Lesson2Orchestration
 
 from application.use_cases.chatbot_usecase import ChatbotUseCase
-from application.use_cases.exercise_extraction_usecase import ExerciseExtractionUseCase
+from application.use_cases.create_lesson_usecase import CreateLessonUseCase
 from infrastructure.config import Settings
 
 class Container(containers.DeclarativeContainer):
     """Dependency injection container for managing application components and their dependencies"""
 
-    wiring_config = containers.WiringConfiguration(modules=["adapters.inbound.rest.chat_router", "adapters.inbound.rest.exercise_extraction_router"])
+    wiring_config = containers.WiringConfiguration(modules=["adapters.inbound.rest.lesson2_router", "adapters.inbound.rest.create_lesson_router"])
 
     config = providers.Singleton(Settings)
 
@@ -101,6 +102,11 @@ class Container(containers.DeclarativeContainer):
         redis_client=redis_client,
     )
 
+    lesson_creation_metadata_store = providers.Singleton(
+        RedisLessonAdapter,
+        redis_client=redis_client,
+    )
+
     profile_store = providers.Singleton(
         MongoProfileAdapter,
         db=mongo_database,
@@ -142,9 +148,10 @@ class Container(containers.DeclarativeContainer):
         profile_store=profile_store,
     )
 
-    exercise_manager = providers.Singleton(
-        ExerciseManager,
+    lesson_manager = providers.Singleton(
+        LessonManager,
         exercise_store_port=exercise_store,
+        lesson_creation_store_port=lesson_creation_metadata_store,
     )
 
     strong_llm_manager = providers.Singleton(
@@ -251,10 +258,11 @@ class Container(containers.DeclarativeContainer):
         orchestration=lesson2_orchestration,
     )
 
-    exercise_extraction_manager = providers.Singleton(
-        ExerciseExtractionUseCase,
+    lesson_creation_manager = providers.Singleton(
+        CreateLessonUseCase,
         llm_manager=strong_llm_manager,
         cloud_manager=cloud_manager,
+        lesson_manager=lesson_manager,
         prompt_builder=prompt_builder,
         pdf_to_markdown_transformer=docs_transformer,
     )

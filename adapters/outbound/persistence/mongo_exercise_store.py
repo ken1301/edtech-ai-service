@@ -3,15 +3,15 @@ from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import PyMongoError
 
-from domain.ports.exercise_store_port import ExerciseStorePort
+from domain.ports.lesson_store_port import LessonStorePort
 
 from domain.models.lesson2_models.exercise import Exercise
 
-from domain.exceptions import ExerciseStoreError
+from domain.exceptions import LessonStoreError
 
 from infrastructure.logging import logger
 
-class MongoExerciseAdapter(ExerciseStorePort):
+class MongoExerciseAdapter(LessonStorePort):
 
     _COLLECTION = "exercises"
     
@@ -60,7 +60,7 @@ class MongoExerciseAdapter(ExerciseStorePort):
                 user_id=user_id,
                 error=str(e),
             )
-            raise ExerciseStoreError(f"Failed to save exercise '{exercise_id}' to MongoDB.") from e
+            raise LessonStoreError(f"Failed to save exercise '{exercise_id}' to MongoDB.") from e
         except Exception as e:
             logger.error(
                 "mongo_exercise_store.save_exercise.unexpected_error",
@@ -69,59 +69,59 @@ class MongoExerciseAdapter(ExerciseStorePort):
                 user_id=user_id,
                 error=str(e),
             )
-            raise ExerciseStoreError("An unexpected error occurred while saving an exercise.") from e
+            raise LessonStoreError("An unexpected error occurred while saving an exercise.") from e
 
-    async def get_exercise_by_id(self, exercise_id: str) -> Exercise:
+    async def get_exercise(self, exercise_id: str) -> Exercise:
         try:
             doc = await self._col.find_one({"exercise_id": exercise_id})
         except PyMongoError as e:
             logger.error(
-                "mongo_exercise_store.get_exercise_by_id.failed",
+                "mongo_exercise_store.get_exercise.failed",
                 log_type="technical",
                 exercise_id=exercise_id,
                 error=str(e),
             )
-            raise ExerciseStoreError(f"Failed to fetch exercise '{exercise_id}' from MongoDB.") from e
+            raise LessonStoreError(f"Failed to fetch exercise '{exercise_id}' from MongoDB.") from e
         except Exception as e:
             logger.error(
-                "mongo_exercise_store.get_exercise_by_id.unexpected_error",
+                "mongo_exercise_store.get_exercise.unexpected_error",
                 log_type="technical",
                 exercise_id=exercise_id,
                 error=str(e),
             )
-            raise ExerciseStoreError("An unexpected error occurred while fetching an exercise.") from e
+            raise LessonStoreError("An unexpected error occurred while fetching an exercise.") from e
 
         if not doc:
             logger.error(
-                "mongo_exercise_store.get_exercise_by_id.not_found",
+                "mongo_exercise_store.get_exercise.not_found",
                 log_type="technical",
                 exercise_id=exercise_id,
             )
-            raise ExerciseStoreError(f"Exercise '{exercise_id}' was not found in MongoDB.")
+            raise LessonStoreError(f"Exercise '{exercise_id}' was not found in MongoDB.")
 
         try:
             logger.debug(
-                "mongo_exercise_store.get_exercise_by_id.completed",
+                "mongo_exercise_store.get_exercise.completed",
                 log_type="debug",
                 exercise_id=exercise_id
             )
             return Exercise(**doc["exercise"])
         except (KeyError, TypeError, ValueError) as e:
             logger.error(
-                "mongo_exercise_store.get_exercise_by_id.deserialize_failed",
+                "mongo_exercise_store.get_exercise.deserialize_failed",
                 log_type="technical",
                 exercise_id=exercise_id,
                 error=str(e),
             )
-            raise ExerciseStoreError(f"Corrupt exercise document for '{exercise_id}'.") from e
+            raise LessonStoreError(f"Corrupt exercise document for '{exercise_id}'.") from e
         except Exception as e:
             logger.error(
-                "mongo_exercise_store.get_exercise_by_id.unexpected_error",
+                "mongo_exercise_store.get_exercise.unexpected_error",
                 log_type="technical",
                 exercise_id=exercise_id,
                 error=str(e),
             )
-            raise ExerciseStoreError("An unexpected error occurred while deserializing an exercise.") from e
+            raise LessonStoreError("An unexpected error occurred while deserializing an exercise.") from e
 
     async def delete_exercise(self, exercise_id: str) -> bool:
         try:
@@ -139,7 +139,7 @@ class MongoExerciseAdapter(ExerciseStorePort):
                 exercise_id=exercise_id,
                 error=str(e),
             )
-            raise ExerciseStoreError(f"Failed to delete exercise '{exercise_id}' from MongoDB.") from e
+            raise LessonStoreError(f"Failed to delete exercise '{exercise_id}' from MongoDB.") from e
         except Exception as e:
             logger.error(
                 "mongo_exercise_store.delete_exercise.unexpected_error",
@@ -147,4 +147,11 @@ class MongoExerciseAdapter(ExerciseStorePort):
                 exercise_id=exercise_id,
                 error=str(e),
             )
-            raise ExerciseStoreError("An unexpected error occurred while deleting an exercise.") from e
+            raise LessonStoreError("An unexpected error occurred while deleting an exercise.") from e
+
+    async def save_lesson_creation_metadata(self, *args, **kwargs):
+        raise NotImplementedError("save_lesson_creation_metadata is a Redis operation.")
+
+    async def get_lesson_creation_metadata(self, *args, **kwargs):
+        raise NotImplementedError("get_lesson_creation_metadata is a Redis operation.")
+    
