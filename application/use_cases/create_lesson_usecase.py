@@ -183,7 +183,8 @@ class CreateLessonUseCase:
                 "subject": subject,
                 "topic": topic,
                 "concept": concept,
-                "lesson1_summary": lesson1_summary
+                "lesson1_summary": lesson1_summary,
+                "content_output_language": "Vietnamese",
             }
             extract_exercise_prompt = await self._prompt_builder.lesson2_exercise_extraction_prompt(**lesson2_exercise_extraction_input)
             llm_response = await self._llm_manager.generate_response(
