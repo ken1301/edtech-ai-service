@@ -86,7 +86,7 @@ class CreateLessonUseCase:
             previous_lessons = []
             lesson1_creation_input = {
                 "content": content,
-                "knowledge_content_language": "Vietnamese",
+                "content_output_language": "Vietnamese",
                 "subject": subject,
                 "topic": topic,
                 "concept": concept,

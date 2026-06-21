@@ -153,5 +153,5 @@ summary: compact carryover note for Lesson 2 preparation.
 10. MC FORMAT: multiple_choice must have ≥ 3 options and exactly one correct answer.
 11. BLOOM BALANCE: Keep majority at remember/understand/apply — this is foundation building, not a final exam.
 12. ENUMS: All enum fields must use the exact lowercase string values listed above.
-13. OUTPUT: Content output language must be preserved in the knowledge and exercises. The summary can be in English.
+13. OUTPUT: Content output language must be preserved in only the knowledge and exercises. 
 </rules>

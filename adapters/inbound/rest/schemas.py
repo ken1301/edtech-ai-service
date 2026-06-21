@@ -14,6 +14,7 @@ class DocumentExtractionRequest(BaseModel):
     lesson_id: str
 
     document_url: Optional[str] = None
+    previous_lesson: List[Concept]
     
     subject: Subject
     topic: Topic
