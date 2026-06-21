@@ -33,12 +33,6 @@ class SafetyDivert:
         history_msg: Optional[List[Message]] = None,
     ) -> tuple[str, SessionMetadata, List]:
         try:
-            logger.debug(
-                "lesson2.safety_divert.process.called",
-                log_type="debug",
-                session_id=session_metadata.session_id,
-            )
-            
             all_token_usage = []
 
             response_input = self._build_response_input(
@@ -57,6 +51,12 @@ class SafetyDivert:
                 evaluate_output=None,
                 ground_output_if_submission=None,
                 request=request,
+            )   
+
+            logger.info(
+                "safety_divert.process.completed",
+                log_type="business",
+                session_id=session_metadata.session_id,
             )
 
             return (

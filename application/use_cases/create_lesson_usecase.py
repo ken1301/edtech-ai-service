@@ -60,8 +60,7 @@ class CreateLessonUseCase:
         """Main method to create lesson 1 base on the provided document URL and user context."""
         try:
             if not document_url:
-                content = ""
-                
+                content = "Document is empty. You can create content by yourself."
             else:
                 document = await self._cloud_manager.fetch_document(document_url=document_url)
                 if isinstance(document, MarkdownDocument):
@@ -145,34 +144,37 @@ class CreateLessonUseCase:
         """Main method to execute the exercise selection process based on the provided document URL."""
 
         try:
-            # 1. Load the document as Markdown, either by downloading it directly or converting from PDF.
-            document = await self._cloud_manager.fetch_document(document_url=document_url)
-            if isinstance(document, MarkdownDocument):
-                markdown_document = document
-                image_set = []
-            else: 
-                markdown_document, image_set = await self._pdf_to_markdown_transformer.execute(document=document)
-
-            # 2. Upload extracted images to cloud storage and get their accessible URLs
-            if not image_set:
-                logger.warning(
-                    "create_lesson2.no_images_found",
-                    document_url=document_url,
-                    log_type="technical"
-                )
+            if not document_url:
+                content = "Document is empty. You can create exercises by yourself."
             else:
-                for image in image_set:
-                    image_url = await self._cloud_manager.upload_document(image_document=image)
+                # 1. Load the document as Markdown, either by downloading it directly or converting from PDF.
+                document = await self._cloud_manager.fetch_document(document_url=document_url)
+                if isinstance(document, MarkdownDocument):
+                    markdown_document = document
+                    image_set = []
+                else: 
+                    markdown_document, image_set = await self._pdf_to_markdown_transformer.execute(document=document)
 
-                    # Replace the local image reference in the Markdown content with the uploaded image URL
-                    markdown_document.content = markdown_document.content.replace(image.filename, image_url)
+                # 2. Upload extracted images to cloud storage and get their accessible URLs
+                if not image_set:
+                    logger.warning(
+                        "create_lesson2.no_images_found",
+                        document_url=document_url,
+                        log_type="technical"
+                    )
+                else:
+                    for image in image_set:
+                        image_url = await self._cloud_manager.upload_document(image_document=image)
+
+                        # Replace the local image reference in the Markdown content with the uploaded image URL
+                        content = markdown_document.content.replace(image.filename, image_url)
 
             lesson_creation_metadata = await self._lesson_manager.get_lesson_creation_metadata(lesson_id=lesson_id)
             lesson1_summary = lesson_creation_metadata.summary if lesson_creation_metadata else "No summary available."
 
             # 3. Build a prompt for the chat service using the Markdown content then send it to the chat service.
             lesson2_exercise_extraction_input = {
-                "content": markdown_document.content,
+                "content": content,
                 "subject": subject,
                 "topic": topic,
                 "concept": concept,

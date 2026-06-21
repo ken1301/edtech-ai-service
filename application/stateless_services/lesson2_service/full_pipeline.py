@@ -46,12 +46,6 @@ class FullPipeline:
         history_msg: Optional[List[Message]] = None,
     ) -> tuple[str, SessionMetadata, List]:
         try:
-            logger.debug(
-                "lesson2.full_pipeline.process.called",
-                log_type="debug",
-                session_id=session_metadata.session_id,
-            )
-
             all_token_usage: List = []
 
             evaluate_input = self._build_evaluate_input(
@@ -86,6 +80,13 @@ class FullPipeline:
             )
 
             content = response_layer_response.output
+
+            logger.info(
+                "full_pipeline.process.completed",
+                log_type="business",
+                session_id=session_metadata.session_id,
+            )
+
             return (
                 content if isinstance(content, str) else str(content),
                 session_metadata,
