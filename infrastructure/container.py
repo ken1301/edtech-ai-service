@@ -78,23 +78,38 @@ class Container(containers.DeclarativeContainer):
 
     strong_llm_adapter = providers.Singleton(
         llm_factory,
-        provider="openai",
-        model_name="gpt-5.4",
-        api_key=config.provided.OPENAI_API_KEY,
+        provider=config.provided.STRONG_LLM_PROVIDER,
+        model_name=config.provided.STRONG_LLM_MODEL,
+        api_key=providers.Callable(
+            lambda provider_name, openai_key, groq_key: openai_key if provider_name == "openai" else groq_key,
+            config.provided.STRONG_LLM_PROVIDER,
+            config.provided.OPENAI_API_KEY,
+            config.provided.GROQ_API_KEY,
+        ),
     )
 
     mid_llm_adapter = providers.Singleton(
         llm_factory,
-        provider="openai",
-        model_name="gpt-5.4-mini",
-        api_key=config.provided.OPENAI_API_KEY,
+        provider=config.provided.MID_LLM_PROVIDER,
+        model_name=config.provided.MID_LLM_MODEL,
+        api_key=providers.Callable(
+            lambda provider_name, openai_key, groq_key: openai_key if provider_name == "openai" else groq_key,
+            config.provided.MID_LLM_PROVIDER,
+            config.provided.OPENAI_API_KEY,
+            config.provided.GROQ_API_KEY,
+        ),
     )
 
     weak_llm_adapter = providers.Singleton(
         llm_factory,
-        provider="openai",
-        model_name="gpt-5.4-nano",
-        api_key=config.provided.OPENAI_API_KEY,
+        provider=config.provided.WEAK_LLM_PROVIDER,
+        model_name=config.provided.WEAK_LLM_MODEL,
+        api_key=providers.Callable(
+            lambda provider_name, openai_key, groq_key: openai_key if provider_name == "openai" else groq_key,
+            config.provided.WEAK_LLM_PROVIDER,
+            config.provided.OPENAI_API_KEY,
+            config.provided.GROQ_API_KEY,
+        ),
     )
     
     cache_adapter = providers.Singleton(
@@ -157,16 +172,27 @@ class Container(containers.DeclarativeContainer):
     strong_llm_manager = providers.Singleton(
         LLMManager,
         llm_port=strong_llm_adapter,
+        fallback_ports=providers.List(mid_llm_adapter, weak_llm_adapter),
+        timeout_seconds=config.provided.LLM_REQUEST_TIMEOUT_SECONDS,
+        max_retries=config.provided.LLM_MAX_RETRIES,
+        retry_backoff_seconds=config.provided.LLM_RETRY_BACKOFF_SECONDS,
     )
 
     mid_llm_manager = providers.Singleton(
         LLMManager,
         llm_port=mid_llm_adapter,
+        fallback_ports=providers.List(weak_llm_adapter),
+        timeout_seconds=config.provided.LLM_REQUEST_TIMEOUT_SECONDS,
+        max_retries=config.provided.LLM_MAX_RETRIES,
+        retry_backoff_seconds=config.provided.LLM_RETRY_BACKOFF_SECONDS,
     )
 
     weak_llm_manager = providers.Singleton(
         LLMManager,
         llm_port=weak_llm_adapter,
+        timeout_seconds=config.provided.LLM_REQUEST_TIMEOUT_SECONDS,
+        max_retries=config.provided.LLM_MAX_RETRIES,
+        retry_backoff_seconds=config.provided.LLM_RETRY_BACKOFF_SECONDS,
     )
 
     adaptive_learning_service = providers.Singleton(

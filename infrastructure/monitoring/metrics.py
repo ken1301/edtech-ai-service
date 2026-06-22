@@ -62,3 +62,15 @@ llm_response_latency = Histogram(
     ['model'],
     buckets=(0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0)
 )
+
+llm_manager_attempts = Counter(
+    'llm_manager_attempts_total',
+    'Total LLM manager invocation attempts',
+    ['provider', 'model', 'port_type', 'attempt_kind', 'response_format']
+)
+
+llm_manager_outcomes = Counter(
+    'llm_manager_outcomes_total',
+    'Total LLM manager outcomes by provider/model and category',
+    ['provider', 'model', 'port_type', 'outcome']
+)
