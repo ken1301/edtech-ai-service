@@ -1,8 +1,10 @@
 import json
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from typing import Optional
 
 import redis.asyncio as aioredis
-from redis.exceptions import RedisError
+from redis.exceptions import LockError, RedisError
 
 from domain.ports.session_store_port import SessionStorePort
 
@@ -32,7 +34,7 @@ class RedisSessionAdapter(SessionStorePort):
     Session timeout:
         `get_metadata` compares the current UTC time against `created_at` stored
         inside the metadata dict. If the gap exceeds SESSION_TIMEOUT_SECONDS
-        (default 1 h), `is_active` is flipped to False and `closed_at` is
+        (default 1 h), `is_active` is flipped to False and `expired_at` is
         stamped. The mutated metadata is immediately persisted back to Redis
         before being returned, so all subsequent workers see the correct state.
 
@@ -47,6 +49,7 @@ class RedisSessionAdapter(SessionStorePort):
 
     _MSG_KEY_TPL  = "session:{session_id}:messages"
     _META_KEY_TPL = "session:{session_id}:metadata"
+    _LOCK_KEY_TPL = "session:{session_id}:lock"
 
     _DEFAULT_TTL             = 60 * 60 * 2  # 2 h  — Redis key expiry
     _SESSION_TIMEOUT_SECONDS = 60 * 60      # 1 h  — business-level session limit
@@ -68,6 +71,43 @@ class RedisSessionAdapter(SessionStorePort):
 
     def _meta_key(self, session_id: str) -> str:
         return self._META_KEY_TPL.format(session_id=session_id)
+
+    def _lock_key(self, session_id: str) -> str:
+        return self._LOCK_KEY_TPL.format(session_id=session_id)
+
+    @asynccontextmanager
+    async def build_session_lock(self, session_id: str, timeout_seconds: int):
+        lock = self._redis.lock(
+            self._lock_key(session_id),
+            timeout=timeout_seconds,
+            blocking_timeout=timeout_seconds,
+            thread_local=False,
+        )
+
+        try:
+            acquired = await lock.acquire()
+            if not acquired:
+                raise SessionStoreError(f"Failed to acquire Redis session lock for '{session_id}'.")
+            yield
+        except RedisError as e:
+            logger.error(
+                "redis_adapter.session_lock.failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+            )
+            raise SessionStoreError(f"Failed to manage Redis session lock for '{session_id}'.") from e
+        finally:
+            try:
+                if await lock.owned():
+                    await lock.release()
+            except LockError as e:
+                logger.warning(
+                    "redis_adapter.session_lock.release_failed",
+                    log_type="technical",
+                    session_id=session_id,
+                    error=str(e),
+                )
 
     # ── (de)serialisation helpers ─────────────────────────────────────────────
 
@@ -101,7 +141,7 @@ class RedisSessionAdapter(SessionStorePort):
         Compares now_utc against `created_at` in metadata.
         If elapsed > SESSION_TIMEOUT_SECONDS and session is still active:
             → flips  is_active  = False
-            → stamps closed_at  = now  (once only; stable on retry)
+            → stamps expired_at = now  (once only; stable on retry)
             → returns (metadata, True)  ← caller must persist to Redis
 
         Returns:
@@ -134,8 +174,8 @@ class RedisSessionAdapter(SessionStorePort):
 
         if elapsed_seconds > self._session_timeout:
             metadata.is_active = False
-            if not metadata.closed_at:
-                metadata.closed_at = now
+            if not metadata.expired_at:
+                metadata.expired_at = now
             return metadata, True
 
         return metadata, False
@@ -153,12 +193,12 @@ class RedisSessionAdapter(SessionStorePort):
 
     # ── SessionStorePort interface ────────────────────────────────────────────
 
-    async def get_metadata(self, session_id: str) -> SessionMetadata:
+    async def get_metadata(self, session_id: str) -> Optional[SessionMetadata]:
         """
         Fetch session metadata from Redis.
 
         Side-effect: if the session has exceeded SESSION_TIMEOUT_SECONDS,
-        `is_active` is flipped to False, `closed_at` is stamped, and the
+        `is_active` is flipped to False, `expired_at` is stamped, and the
         updated dict is written back to Redis before being returned.
         """
         try:
@@ -183,7 +223,7 @@ class RedisSessionAdapter(SessionStorePort):
             raise SessionStoreError("An unexpected error occurred while fetching session metadata.") from e
 
         if not raw:
-            return SessionMetadata()
+            return None
 
         try:
             data = json.loads(raw)
@@ -233,6 +273,51 @@ class RedisSessionAdapter(SessionStorePort):
             session_id=session_id,
         )
         return metadata
+
+    async def list_sessions_pending_expiration_sync(self) -> list[SessionMetadata]:
+        """Scan raw metadata keys and return sessions that have exceeded the business timeout but are not yet closing/closed."""
+        try:
+            session_metadata: list[SessionMetadata] = []
+            async for key in self._redis.scan_iter(match=self._META_KEY_TPL.format(session_id="*")):
+                raw = await self._redis.get(key)
+                if not raw:
+                    continue
+
+                data = json.loads(raw)
+                metadata = SessionMetadata(**data)
+                if not metadata.session_id or not metadata.user_id:
+                    continue
+                if metadata.closed_at is not None or metadata.is_closing:
+                    continue
+
+                metadata_after_timeout, expired = self._check_session_timeout(metadata.session_id, metadata)
+                if not expired:
+                    continue
+
+                session_metadata.append(metadata_after_timeout)
+
+            return session_metadata
+        except RedisError as e:
+            logger.error(
+                "redis_adapter.list_sessions_pending_expiration_sync.failed",
+                log_type="technical",
+                error=str(e),
+            )
+            raise SessionStoreError("Failed to scan Redis session metadata for expired sessions.") from e
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            logger.error(
+                "redis_adapter.list_sessions_pending_expiration_sync.deserialize_failed",
+                log_type="technical",
+                error=str(e),
+            )
+            raise SessionStoreError("Failed to deserialize Redis session metadata during expiration scan.") from e
+        except Exception as e:
+            logger.error(
+                "redis_adapter.list_sessions_pending_expiration_sync.unexpected_error",
+                log_type="technical",
+                error=str(e),
+            )
+            raise SessionStoreError("Unexpected error while scanning expired Redis sessions.") from e
 
     async def save_metadata(self, session_id: str, metadata: SessionMetadata) -> None:
         try:
@@ -304,6 +389,49 @@ class RedisSessionAdapter(SessionStorePort):
                 error=str(e),
             )
             raise SessionStoreError("An unexpected error occurred while saving a message turn.") from e
+
+    async def save_turn_with_metadata(
+        self,
+        session_id: str,
+        user_message: Message,
+        assistant_message: Message,
+        metadata: SessionMetadata,
+    ) -> None:
+        """Persist the turn and metadata in one Redis pipeline so turn_count stays consistent."""
+        try:
+            msg_key = self._msg_key(session_id)
+            meta_key = self._meta_key(session_id)
+            pipe = self._redis.pipeline()
+            pipe.rpush(msg_key, self._serialize_message(user_message))
+            pipe.rpush(msg_key, self._serialize_message(assistant_message))
+            pipe.expire(msg_key, self._ttl)
+            pipe.set(meta_key, metadata.model_dump_json(), ex=self._ttl)
+            await pipe.execute()
+            logger.debug(
+                "redis_adapter.save_turn_with_metadata.completed",
+                log_type="debug",
+                session_id=session_id,
+            )
+        except RedisError as e:
+            logger.error(
+                "redis_adapter.save_turn_with_metadata.failed",
+                log_type="technical",
+                session_id=session_id,
+                user_correlation_id=user_message.correlation_id,
+                error=str(e),
+            )
+            raise SessionStoreError(
+                f"Failed to save turn and metadata for session '{session_id}' to Redis."
+            ) from e
+        except Exception as e:
+            logger.error(
+                "redis_adapter.save_turn_with_metadata.unexpected_error",
+                log_type="technical",
+                session_id=session_id,
+                user_correlation_id=user_message.correlation_id,
+                error=str(e),
+            )
+            raise SessionStoreError("An unexpected error occurred while saving a turn and metadata.") from e
 
     async def get_history_messages(self, session_id: str) -> list[Message]:
         """Return the full message history for a session, ordered by insertion time."""

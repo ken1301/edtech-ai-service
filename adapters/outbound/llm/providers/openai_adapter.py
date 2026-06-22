@@ -1,5 +1,3 @@
-from tracemalloc import start
-
 import openai
 from openai import AsyncOpenAI
 import instructor
@@ -8,17 +6,19 @@ from pydantic import BaseModel
 from typing import List, Optional
 import time
 
-from domain.exceptions import LLMAdapterError
+from domain.exceptions import (
+    LLMAuthenticationError,
+    LLMConfigurationError,
+    LLMProviderError,
+    LLMRateLimitError,
+    LLMStructuredOutputError,
+)
 from domain.ports.llm_port import LLMPort
 from domain.models.overall_models.message import Message, ConversationContext
 from domain.models.overall_models.response import LLMResponse, TokenUsage
 
 from infrastructure.logging import logger
-from infrastructure.monitoring.metrics import (
-    tokens_used, request_cost,
-    tokens_per_request, cost_per_request,
-    llm_response_latency
-)
+from infrastructure.monitoring.llm_metrics import LLMMetricsTracker
 
 
 class OpenaiAdapter(LLMPort):
@@ -101,16 +101,14 @@ class OpenaiAdapter(LLMPort):
             output_cost = (usage.completion_tokens / 1_000_000) * self.output_cost_per_million[self.model]
             total_cost  = input_cost + output_cost
 
-            # record metrics
-            llm_response_latency.labels(model=self.model).observe(duration)
-
-            tokens_used.labels(model=self.model, token_type="input").inc(usage.prompt_tokens)
-            tokens_used.labels(model=self.model, token_type="output").inc(usage.completion_tokens)
-
-            tokens_per_request.labels(model=self.model).observe(usage.total_tokens)
-
-            request_cost.labels(model=self.model).inc(total_cost)
-            cost_per_request.labels(model=self.model).observe(total_cost)
+            LLMMetricsTracker.track_request(
+                model=self.model,
+                input_tokens=usage.prompt_tokens,
+                output_tokens=usage.completion_tokens,
+                input_cost=input_cost,
+                output_cost=output_cost,
+                response_time=duration,
+            )
 
             logger.debug(
                 "openai_adapter.plain.completed",
@@ -135,7 +133,7 @@ class OpenaiAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("OpenAI rate limit exceeded. Please try again later.") from e
+            raise LLMRateLimitError("OpenAI rate limit exceeded. Please try again later.") from e
 
         except openai.AuthenticationError as e:
             logger.error(
@@ -143,7 +141,7 @@ class OpenaiAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("OpenAI authentication failed. Check your API key.") from e
+            raise LLMAuthenticationError("OpenAI authentication failed. Check your API key.") from e
 
         except openai.BadRequestError as e:
             logger.error(
@@ -151,7 +149,7 @@ class OpenaiAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("OpenAI bad request. Check your input parameters.") from e
+            raise LLMConfigurationError("OpenAI bad request. Check your input parameters.") from e
 
         except openai.OpenAIError as e:
             logger.error(
@@ -159,7 +157,7 @@ class OpenaiAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("OpenAI API error occurred. Please try again later.") from e
+            raise LLMProviderError("OpenAI API error occurred. Please try again later.") from e
 
         except Exception as e:
             logger.error(
@@ -167,7 +165,7 @@ class OpenaiAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("An unexpected error occurred while calling OpenAI API.") from e
+            raise LLMProviderError("An unexpected error occurred while calling OpenAI API.") from e
 
     async def _generate_structured(
         self,
@@ -198,16 +196,14 @@ class OpenaiAdapter(LLMPort):
             output_cost = (usage.completion_tokens / 1_000_000) * self.output_cost_per_million[self.model]
             total_cost  = input_cost + output_cost
 
-            # record metrics
-            llm_response_latency.labels(model=self.model).observe(duration)
-
-            tokens_used.labels(model=self.model, token_type="input").inc(usage.prompt_tokens)
-            tokens_used.labels(model=self.model, token_type="output").inc(usage.completion_tokens)
-
-            tokens_per_request.labels(model=self.model).observe(usage.total_tokens)
-
-            request_cost.labels(model=self.model).inc(total_cost)
-            cost_per_request.labels(model=self.model).observe(total_cost)
+            LLMMetricsTracker.track_request(
+                model=self.model,
+                input_tokens=usage.prompt_tokens,
+                output_tokens=usage.completion_tokens,
+                input_cost=input_cost,
+                output_cost=output_cost,
+                response_time=duration,
+            )
 
             logger.debug(
                 "openai_adapter.structured.completed",
@@ -239,7 +235,7 @@ class OpenaiAdapter(LLMPort):
                 attempts=e.n_attempts if hasattr(e, "n_attempts") else "unknown",
                 last_error=str(e),
             )
-            raise LLMAdapterError(
+            raise LLMStructuredOutputError(
                 "Instructor failed to produce a valid structured response after all retries."
             ) from e
 
@@ -252,7 +248,7 @@ class OpenaiAdapter(LLMPort):
                 response_model=response_model.__name__,
                 error=str(e),
             )
-            raise LLMAdapterError(
+            raise LLMStructuredOutputError(
                 "Model output was cut off before the structured response was complete. "
                 "Consider increasing max_completion_tokens."
             ) from e
@@ -265,7 +261,7 @@ class OpenaiAdapter(LLMPort):
                 response_model=response_model.__name__,
                 error=str(e),
             )
-            raise LLMAdapterError("Instructor encountered an error processing the structured request.") from e
+            raise LLMStructuredOutputError("Instructor encountered an error processing the structured request.") from e
 
         # ── OpenAI API exceptions ─────────────────────────────────────────────
 
@@ -275,7 +271,7 @@ class OpenaiAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("OpenAI rate limit exceeded. Please try again later.") from e
+            raise LLMRateLimitError("OpenAI rate limit exceeded. Please try again later.") from e
 
         except openai.AuthenticationError as e:
             logger.error(
@@ -283,7 +279,7 @@ class OpenaiAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("OpenAI authentication failed. Check your API key.") from e
+            raise LLMAuthenticationError("OpenAI authentication failed. Check your API key.") from e
 
         except openai.BadRequestError as e:
             logger.error(
@@ -291,7 +287,7 @@ class OpenaiAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("OpenAI bad request. Check your input parameters.") from e
+            raise LLMConfigurationError("OpenAI bad request. Check your input parameters.") from e
 
         except openai.OpenAIError as e:
             logger.error(
@@ -299,7 +295,7 @@ class OpenaiAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("OpenAI API error occurred. Please try again later.") from e
+            raise LLMProviderError("OpenAI API error occurred. Please try again later.") from e
 
         except Exception as e:
             logger.error(
@@ -307,7 +303,7 @@ class OpenaiAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("An unexpected error occurred while calling OpenAI API.") from e
+            raise LLMProviderError("An unexpected error occurred while calling OpenAI API.") from e
 
     async def generate_stream(
         self,

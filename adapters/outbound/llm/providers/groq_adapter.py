@@ -4,14 +4,22 @@ import instructor
 from instructor.exceptions import IncompleteOutputException, InstructorError, InstructorRetryException
 from pydantic import BaseModel
 from typing import List, Optional
+import time
 
-from domain.exceptions import LLMAdapterError
+from domain.exceptions import (
+    LLMAuthenticationError,
+    LLMConfigurationError,
+    LLMProviderError,
+    LLMRateLimitError,
+    LLMStructuredOutputError,
+)
 from domain.ports.llm_port import LLMPort
 
 from domain.models.overall_models.message import Message, ConversationContext
 from domain.models.overall_models.response import LLMResponse, TokenUsage
 
 from infrastructure.logging import logger
+from infrastructure.monitoring.llm_metrics import LLMMetricsTracker
 
 class GroqAdapter(LLMPort):
     """
@@ -36,6 +44,15 @@ class GroqAdapter(LLMPort):
         self._base_client = AsyncGroq(api_key=api_key)
         self._instructor_client = instructor.from_groq(self._base_client)
         self.model = model
+        self.input_cost_per_million = {}
+        self.output_cost_per_million = {}
+
+    def _token_costs(self, usage) -> tuple[float, float]:
+        input_cost_per_million = self.input_cost_per_million.get(self.model, 0.0)
+        output_cost_per_million = self.output_cost_per_million.get(self.model, 0.0)
+        input_cost = (usage.prompt_tokens / 1_000_000) * input_cost_per_million
+        output_cost = (usage.completion_tokens / 1_000_000) * output_cost_per_million
+        return input_cost, output_cost
 
     async def generate_response(
         self,
@@ -67,7 +84,19 @@ class GroqAdapter(LLMPort):
     async def _generate_plain(self, api_params: dict) -> LLMResponse:
         """Plain-text completion via the base AsyncGroq client."""
         try:
+            start = time.time()
             completion = await self._base_client.chat.completions.create(**api_params)
+            duration = time.time() - start
+            usage = completion.usage
+            input_cost, output_cost = self._token_costs(usage)
+            LLMMetricsTracker.track_request(
+                model=self.model,
+                input_tokens=usage.prompt_tokens,
+                output_tokens=usage.completion_tokens,
+                input_cost=input_cost,
+                output_cost=output_cost,
+                response_time=duration,
+            )
 
             return LLMResponse(
                 content=completion.choices[0].message.content,
@@ -86,7 +115,7 @@ class GroqAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("Groq API rate limit exceeded. Please try again later.") from e
+            raise LLMRateLimitError("Groq API rate limit exceeded. Please try again later.") from e
 
         except groq.AuthenticationError as e:
             logger.error(
@@ -94,7 +123,7 @@ class GroqAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("Groq API authentication failed. Check your API key.") from e
+            raise LLMAuthenticationError("Groq API authentication failed. Check your API key.") from e
 
         except groq.BadRequestError as e:
             logger.error(
@@ -102,7 +131,7 @@ class GroqAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("Groq API bad request. Check your input parameters.") from e
+            raise LLMConfigurationError("Groq API bad request. Check your input parameters.") from e
 
         except groq.APIError as e:
             logger.error(
@@ -110,7 +139,7 @@ class GroqAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("Groq API error occurred. Please try again later.") from e
+            raise LLMProviderError("Groq API error occurred. Please try again later.") from e
 
         except Exception as e:
             logger.error(
@@ -118,7 +147,7 @@ class GroqAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("An unexpected error occurred while calling Groq API.") from e
+            raise LLMProviderError("An unexpected error occurred while calling Groq API.") from e
 
     async def _generate_structured(
         self,
@@ -134,9 +163,21 @@ class GroqAdapter(LLMPort):
             InstructorError           ← base class, other instructor failures
         """
         try:
+            start = time.time()
             parsed, completion = await self._instructor_client.chat.completions.create_with_completion(
                 **api_params,
                 response_model=response_model,
+            )
+            duration = time.time() - start
+            usage = completion.usage
+            input_cost, output_cost = self._token_costs(usage)
+            LLMMetricsTracker.track_request(
+                model=self.model,
+                input_tokens=usage.prompt_tokens,
+                output_tokens=usage.completion_tokens,
+                input_cost=input_cost,
+                output_cost=output_cost,
+                response_time=duration,
             )
 
             return LLMResponse(
@@ -158,7 +199,7 @@ class GroqAdapter(LLMPort):
                 attempts=e.n_attempts if hasattr(e, "n_attempts") else "unknown",
                 last_error=str(e),
             )
-            raise LLMAdapterError(
+            raise LLMStructuredOutputError(
                 "Instructor failed to produce a valid structured response after all retries."
             ) from e
 
@@ -169,7 +210,7 @@ class GroqAdapter(LLMPort):
                 response_model=response_model.__name__,
                 error=str(e),
             )
-            raise LLMAdapterError(
+            raise LLMStructuredOutputError(
                 "Model output was cut off before the structured response was complete. "
                 "Consider increasing max_tokens."
             ) from e
@@ -181,7 +222,7 @@ class GroqAdapter(LLMPort):
                 response_model=response_model.__name__,
                 error=str(e),
             )
-            raise LLMAdapterError("Instructor encountered an error processing the structured request.") from e
+            raise LLMStructuredOutputError("Instructor encountered an error processing the structured request.") from e
 
         except groq.RateLimitError as e:
             logger.warning(
@@ -189,7 +230,7 @@ class GroqAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("Groq API rate limit exceeded. Please try again later.") from e
+            raise LLMRateLimitError("Groq API rate limit exceeded. Please try again later.") from e
 
         except groq.AuthenticationError as e:
             logger.error(
@@ -197,7 +238,7 @@ class GroqAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("Groq API authentication failed. Check your API key.") from e
+            raise LLMAuthenticationError("Groq API authentication failed. Check your API key.") from e
 
         except groq.BadRequestError as e:
             logger.error(
@@ -205,7 +246,7 @@ class GroqAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("Groq API bad request. Check your input parameters.") from e
+            raise LLMConfigurationError("Groq API bad request. Check your input parameters.") from e
 
         except groq.APIError as e:
             logger.error(
@@ -213,7 +254,7 @@ class GroqAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("Groq API error occurred. Please try again later.") from e
+            raise LLMProviderError("Groq API error occurred. Please try again later.") from e
 
         except Exception as e:
             logger.error(
@@ -221,7 +262,7 @@ class GroqAdapter(LLMPort):
                 log_type="technical",
                 error=str(e),
             )
-            raise LLMAdapterError("An unexpected error occurred while calling Groq API.") from e
+            raise LLMProviderError("An unexpected error occurred while calling Groq API.") from e
 
     async def generate_stream(
         self,

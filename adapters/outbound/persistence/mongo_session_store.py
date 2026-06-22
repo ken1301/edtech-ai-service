@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
+import asyncio
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo import ASCENDING
 from pymongo.errors import PyMongoError
 
 from domain.ports.session_store_port import SessionStorePort
@@ -37,9 +39,32 @@ class MongoSessionAdapter(SessionStorePort):
     """
 
     _COLLECTION = "session_messages"
+    _ARCHIVE_IDEMPOTENCY_INDEX_NAME = "user_id_session_id_archive_kind_archive_request_id_unique"
 
     def __init__(self, db: AsyncIOMotorDatabase):
         self._col = db[self._COLLECTION]
+        self._index_lock = asyncio.Lock()
+        self._indexes_ready = False
+
+    async def _ensure_indexes(self) -> None:
+        if self._indexes_ready:
+            return
+
+        async with self._index_lock:
+            if self._indexes_ready:
+                return
+
+            await self._col.create_index(
+                [
+                    ("user_id", ASCENDING),
+                    ("session_id", ASCENDING),
+                    ("archive_kind", ASCENDING),
+                    ("archive_request_id", ASCENDING),
+                ],
+                unique=True,
+                name=self._ARCHIVE_IDEMPOTENCY_INDEX_NAME,
+            )
+            self._indexes_ready = True
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
@@ -69,6 +94,8 @@ class MongoSessionAdapter(SessionStorePort):
         subject: Subject,
         topic: Topic,
         concept: Concept,
+        archive_kind: str,
+        archive_request_id: str,
     ) -> None:
         """Persist a batch of messages to MongoDB (called during compression or session close)."""
         if not messages:
@@ -80,21 +107,37 @@ class MongoSessionAdapter(SessionStorePort):
                 subject=subject.value,
                 topic=topic.value,
                 concept=concept.value,
+                archive_kind=archive_kind,
+                archive_request_id=archive_request_id,
             )
             return
 
-        doc = {
-            "session_id": session_id,
-            "user_id": user_id,
-            "subject":    subject.value,
-            "topic":      topic.value,
-            "concept":    concept.value,
-            "messages":   [self._serialize_message(m) for m in messages],
-            "created_at": datetime.now(timezone.utc),
-        }
+        now = datetime.now(timezone.utc)
 
         try:
-            await self._col.insert_one(doc)
+            await self._ensure_indexes()
+            result = await self._col.update_one(
+                {
+                    "session_id": session_id,
+                    "user_id": user_id,
+                    "archive_kind": archive_kind,
+                    "archive_request_id": archive_request_id,
+                },
+                {
+                    "$setOnInsert": {
+                        "session_id": session_id,
+                        "user_id": user_id,
+                        "subject": subject.value,
+                        "topic": topic.value,
+                        "concept": concept.value,
+                        "archive_kind": archive_kind,
+                        "archive_request_id": archive_request_id,
+                        "messages": [self._serialize_message(m) for m in messages],
+                        "created_at": now,
+                    }
+                },
+                upsert=True,
+            )
             logger.debug(
                 "mongo_session_store.save_messages.completed",
                 log_type="debug",
@@ -103,7 +146,10 @@ class MongoSessionAdapter(SessionStorePort):
                 subject=subject.value,
                 topic=topic.value,
                 concept=concept.value,
+                archive_kind=archive_kind,
+                archive_request_id=archive_request_id,
                 message_count=len(messages),
+                inserted=bool(getattr(result, "upserted_id", None)),
             )
         except PyMongoError as e:
             logger.error(
@@ -114,6 +160,8 @@ class MongoSessionAdapter(SessionStorePort):
                 subject=subject.value,
                 topic=topic.value,
                 concept=concept.value,
+                archive_kind=archive_kind,
+                archive_request_id=archive_request_id,
                 message_count=len(messages),
                 error=str(e),
             )
@@ -129,19 +177,21 @@ class MongoSessionAdapter(SessionStorePort):
                 subject=subject.value,
                 topic=topic.value,
                 concept=concept.value,
+                archive_kind=archive_kind,
+                archive_request_id=archive_request_id,
                 message_count=len(messages),
                 error=str(e),
             )
             raise SessionStoreError("An unexpected error occurred while saving session messages.") from e
 
-    async def get_history_messages(self, session_id: str) -> list[Message]:
+    async def get_history_messages(self, session_id: str, user_id: str) -> list[Message]:
         """
         Retrieve all messages for a session from MongoDB, sorted by insertion time.
         Merges multiple documents (from separate compress batches) in order.
         """
         try:
             cursor = self._col.find(
-                {"session_id": session_id},
+                {"session_id": session_id, "user_id": user_id},
                 sort=[("created_at", 1)],
             )
 
@@ -155,6 +205,7 @@ class MongoSessionAdapter(SessionStorePort):
                 "mongo_session_store.get_history_messages.failed",
                 log_type="technical",
                 session_id=session_id,
+                user_id=user_id,
                 error=str(e),
             )
             raise SessionStoreError(
@@ -165,6 +216,7 @@ class MongoSessionAdapter(SessionStorePort):
                 "mongo_session_store.get_history_messages.unexpected_error",
                 log_type="technical",
                 session_id=session_id,
+                user_id=user_id,
                 error=str(e),
             )
             raise SessionStoreError("An unexpected error occurred while retrieving session history.") from e
@@ -173,6 +225,7 @@ class MongoSessionAdapter(SessionStorePort):
             "mongo_session_store.get_history_messages.completed",
             log_type="debug",
             session_id=session_id,
+            user_id=user_id,
             message_count=len(all_messages),
         )
         return all_messages
@@ -187,6 +240,9 @@ class MongoSessionAdapter(SessionStorePort):
 
     async def save_turn(self, *args, **kwargs):
         raise NotImplementedError("save_turn is a Redis operation.")
+
+    async def save_turn_with_metadata(self, *args, **kwargs):
+        raise NotImplementedError("save_turn_with_metadata is a Redis operation.")
 
     async def get_right(self, *args, **kwargs):
         raise NotImplementedError("get_right is a Redis operation.")
