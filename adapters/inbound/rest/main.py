@@ -1,5 +1,6 @@
 import os
 import sys
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 from dotenv import load_dotenv
@@ -27,9 +28,31 @@ container = Container()
 container.wire(modules=["adapters.inbound.rest.lesson2_router"])
 container.wire(modules=["adapters.inbound.rest.create_lesson_router"])
 
+
+async def _run_expiration_sweep_loop(interval_seconds: int):
+    learning_service = container.learning_service()
+    while True:
+        try:
+            await learning_service.sync_expired_sessions()
+        except Exception:
+            logging.exception("expiration_sweep_loop.failed")
+        await asyncio.sleep(interval_seconds)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    worker_task = None
+    sweep_interval = max(0, container.config().SESSION_EXPIRATION_SWEEP_SECONDS)
+    if sweep_interval > 0:
+        worker_task = asyncio.create_task(_run_expiration_sweep_loop(sweep_interval))
+
     yield
+
+    if worker_task is not None:
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            pass
     try:
         await container.cache_adapter().close()
     except Exception:
@@ -54,7 +77,7 @@ app.add_middleware(
     allow_origins=[container.config().NESTJS_BACKEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["X-Correlation-ID", "Content-Type", "Authorization"],
+    allow_headers=["X-Correlation-ID", "Content-Type", "Authorization", "X-API-Key"],
     expose_headers=["X-Correlation-ID"],
 )
 
