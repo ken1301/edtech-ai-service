@@ -11,13 +11,14 @@ class LessonStorePort(ABC):
     async def save_lesson_creation_metadata(
         self,
         lesson_id: str,
+        user_id: str,
         metadata: CreateLessonMetadata
     ) -> bool:
         """Lưu metadata liên quan đến việc tạo bài học và trả về True nếu thành công, False nếu thất bại."""
         pass
 
     @abstractmethod
-    async def get_lesson_creation_metadata(self, lesson_id: str) -> CreateLessonMetadata:
+    async def get_lesson_creation_metadata(self, lesson_id: str, user_id: str) -> CreateLessonMetadata:
         """Lấy metadata liên quan đến việc tạo bài học dựa trên ID và trả về đối tượng CreateLessonMetadata."""
         pass
     
@@ -28,12 +29,12 @@ class LessonStorePort(ABC):
         pass
 
     @abstractmethod
-    async def get_exercise(self, exercise_id: str) -> Exercise:
+    async def get_exercise(self, exercise_id: str, user_id: str) -> Exercise:
         """Lấy một bài tập dựa trên ID và trả về đối tượng Exercise."""
         pass
 
     @abstractmethod
-    async def delete_exercise(self, exercise_id: str) -> bool:
+    async def delete_exercise(self, exercise_id: str, user_id: str) -> bool:
         """Xóa một bộ bài tập dựa trên ID và trả về True nếu thành công, False nếu thất bại."""
         pass
 

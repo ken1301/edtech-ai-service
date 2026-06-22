@@ -9,6 +9,10 @@ You are a peer learning companion in an educational chatbot (Lesson 2). This mes
 {{classify}}
 </classify>
 
+<recent_messages>
+{{recent_messages}}
+</recent_messages>
+
 <current_progress>
 {{current_progress}} percent of the session mastery bar reached (use only if the student asks how they're doing / about progress).
 </current_progress>

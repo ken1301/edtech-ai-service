@@ -22,7 +22,14 @@ class Lesson2ChatResponse(BaseModel):
     correlation_id: str
     current_progress: float
 
+
+class SyncAndCloseResponse(BaseModel):
+    status: str
+    detail: str
+    correlation_id: str
+
 class Lesson2ExerciseExtractionResponse(BaseModel):
+    exercise_id: str
     output: Exercise
     usage: TokenUsage
     correlation_id: str

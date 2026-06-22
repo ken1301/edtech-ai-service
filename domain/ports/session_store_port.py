@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Optional
 
 from domain.models.overall_models.message import Message
 from domain.models.overall_models.curriculum import Subject
@@ -19,14 +20,14 @@ class SessionStorePort(ABC):
     # ── Redis operations ──────────────────────────────────────────────────────
 
     @abstractmethod
-    async def get_metadata(self, session_id: str) -> SessionMetadata:
+    async def get_metadata(self, session_id: str) -> Optional[SessionMetadata]:
         """
         Return session metadata for the given session.
 
         Side-effect (Redis adapter only): if `created_at` shows the session has
         exceeded the configured timeout, `is_active` is flipped to False,
-        `closed_at` is stamped, and the change is persisted before returning.
-        Returns an empty SessionMetadata when the session is not found.
+        `expired_at` is stamped, and the change is persisted before returning.
+        Returns None when the session is not found.
         """
 
     @abstractmethod
@@ -41,6 +42,16 @@ class SessionStorePort(ABC):
         assistant_message: Message,
     ) -> None:
         """Append a (user, assistant) message pair to the session history."""
+
+    @abstractmethod
+    async def save_turn_with_metadata(
+        self,
+        session_id: str,
+        user_message: Message,
+        assistant_message: Message,
+        metadata: SessionMetadata,
+    ) -> None:
+        """Atomically persist a (user, assistant) turn and the updated session metadata."""
 
     @abstractmethod
     async def get_right(self, session_id: str, limit: int) -> list[Message]:
@@ -68,6 +79,9 @@ class SessionStorePort(ABC):
         messages: list[Message],
         subject: Subject,
         topic: str,
+        concept: str,
+        archive_kind: str,
+        archive_request_id: str,
     ) -> None:
         """
         Persist a batch of messages for long-term storage.
@@ -75,7 +89,7 @@ class SessionStorePort(ABC):
         """
 
     @abstractmethod
-    async def get_history_messages(self, session_id: str) -> list[Message]:
+    async def get_history_messages(self, session_id: str, user_id: str) -> list[Message]:
         """
         Return the full message history for a session, ordered by insertion time.
         May merge multiple batched documents into a single flat list.

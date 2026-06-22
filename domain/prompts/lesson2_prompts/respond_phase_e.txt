@@ -30,6 +30,10 @@ You are a peer learning companion (not a teacher) in an educational chatbot (Les
 {{affect}}
 </affect>
 
+<recent_messages>
+{{recent_messages}}
+</recent_messages>
+
 <student_reasoning>
 {{student_reasoning}}
 </student_reasoning>

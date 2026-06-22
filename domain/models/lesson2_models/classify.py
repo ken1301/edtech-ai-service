@@ -1,6 +1,7 @@
 from enum import Enum
-from typing import List, Optional, Literal
-from pydantic import BaseModel
+from typing import Annotated, List, Literal, Optional
+
+from pydantic import BaseModel, Field, StringConstraints
 
 from domain.models.overall_models.message import Message
 from domain.models.lesson2_models.common import SubmissionData, Lesson2LayerUsage  # noqa: F401  (re-export)
@@ -19,11 +20,14 @@ class Intent(str, Enum):
     JAILBREAK_ATTEMPT = "jailbreak_attempt"
     UNINTELLIGIBLE = "unintelligible"
 
+
+ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
+
 class EmotionalSignal(BaseModel):
-    valence: float
-    frustration: float
-    confusion: float
-    confidence_tone: float
+    valence: float = Field(ge=0.0, le=1.0)
+    frustration: float = Field(ge=0.0, le=1.0)
+    confusion: float = Field(ge=0.0, le=1.0)
+    confidence_tone: float = Field(ge=0.0, le=1.0)
 
 class Routing(str, Enum):
     FAST_PATH_REPLY = "fast_path_reply"
@@ -31,18 +35,17 @@ class Routing(str, Enum):
     SAFETY_DIVERT = "safety_divert"
 
 class ClassifyInput(BaseModel):
-    user_msg: str
     is_submission: bool
     submission_data: Optional[SubmissionData] = None
-    recent_messages: List[Message]
-    current_problem_id: Optional[int] = None 
-    problem_question: List[str] = [] # all questions of the problem (id from 1 to 4)
+    recent_messages: List[Message] = Field(default_factory=list, max_length=12)
+    current_problem_id: Optional[int] = Field(default=None, gt=0)
+    problem_question: List[ShortText] = Field(default_factory=list, max_length=8) # all questions of the problem (id from 1 to 4)
 
 class ClassifyOutput(BaseModel):
     intent: Intent
-    intent_confidence: float
+    intent_confidence: float = Field(ge=0.0, le=1.0)
     emotional: EmotionalSignal
-    learning_relevance: float
-    references_problem_id: Optional[int]
-    abuse_flags: List[Literal["jailbreak", "extract_answer", "hostile", "spam"]]
+    learning_relevance: float = Field(ge=0.0, le=1.0)
+    references_problem_id: Optional[int] = Field(default=None, gt=0)
+    abuse_flags: List[Literal["jailbreak", "extract_answer", "hostile", "spam"]] = Field(default_factory=list, max_length=4)
     routing: Routing
