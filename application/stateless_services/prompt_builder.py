@@ -42,6 +42,26 @@ class PromptBuilder:
     LESSON2_RESPOND_PHASE_O_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "respond_phase_o.txt").read_text(encoding="utf-8")
     LESSON2_RESPOND_WRAP_UP_PROMPT = (_LESSON2_PROMPT_TEMPLATE_DIR / "respond_wrap_up.txt").read_text(encoding="utf-8")
 
+    _UNTRUSTED_CONTEXT_KEYS = {
+        "content",
+        "current_approach_reasoning",
+        "evaluate_summary",
+        "existing_compression",
+        "last_evaluate_summary",
+        "lesson1_summary",
+        "matched_weakness",
+        "messages",
+        "messages_to_compress",
+        "misconceptions",
+        "problem_final_answer",
+        "problem_outcomes",
+        "problem_question",
+        "student_reasoning",
+        "student_submitted_answer",
+        "summary",
+        "user_msg",
+    }
+
     def __init__(self):
         pass
 
@@ -63,6 +83,24 @@ class PromptBuilder:
             return json.dumps(list(value), ensure_ascii=False, indent=2, default=PromptBuilder._json_default)
 
         return str(value)
+
+    @staticmethod
+    def _escape_untrusted_serialized_text(serialized: str) -> str:
+        return (
+            serialized
+            .replace("<", "\\u003c")
+            .replace(">", "\\u003e")
+            .replace("&", "\\u0026")
+        )
+
+    @classmethod
+    def _serialize_context_value(cls, key: str, value: Any) -> str:
+        serialized = cls._serialize_value(value)
+        if key in cls._UNTRUSTED_CONTEXT_KEYS:
+            if not isinstance(value, (Mapping, list, tuple, set)):
+                serialized = json.dumps(str(value), ensure_ascii=False)
+            return cls._escape_untrusted_serialized_text(serialized)
+        return serialized
 
     @classmethod
     def _resolve_context_value(cls, context: Mapping[str, Any], key: str) -> Any:
@@ -100,7 +138,7 @@ class PromptBuilder:
             value = cls._resolve_context_value(context, key)
             if value is None and key not in context:
                 return match.group(0)
-            return cls._serialize_value(value)
+            return cls._serialize_context_value(key, value)
 
         return re.sub(r"\{\{\s*([a-zA-Z0-9_\.]+)\s*\}\}", replace, template)
 

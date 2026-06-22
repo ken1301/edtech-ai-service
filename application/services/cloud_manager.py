@@ -12,11 +12,11 @@ class CloudManager:
     def __init__(self, cloud_port: CloudPort):
         self._cloud_port = cloud_port
 
-    async def fetch_document(self, document_url: str) -> PDFDocument | ImageDocument | MarkdownDocument:
+    async def fetch_document(self, document_url: str, user_id: str) -> PDFDocument | ImageDocument | MarkdownDocument:
         """Fetch a document from cloud storage using its unique identifier."""
         try:
             
-            document = await self._cloud_port.download_document(document_url)
+            document = await self._cloud_port.download_document(document_url, user_id)
 
             logger.info(
                 "cloud_manager.fetch_document.completed",
@@ -39,10 +39,10 @@ class CloudManager:
             )
             raise CloudManagerError("Unexpected error while fetching document from cloud storage.") from e
 
-    async def upload_document(self, document: PDFDocument | ImageDocument | MarkdownDocument) -> str:
+    async def upload_document(self, document: PDFDocument | ImageDocument | MarkdownDocument, user_id: str) -> str:
         """Upload a document to cloud storage and return its accessible URL."""
         try:
-            document_url = await self._cloud_port.upload_document(document)
+            document_url = await self._cloud_port.upload_document(document, user_id)
             logger.info(
                 "cloud_manager.upload_document.completed",
                 log_type="business",
@@ -65,10 +65,10 @@ class CloudManager:
             )
             raise CloudManagerError("Unexpected error while uploading document to cloud storage.") from e
 
-    async def delete_document(self, document_url: str) -> bool:
+    async def delete_document(self, document_url: str, user_id: str) -> bool:
         """Delete a document from cloud storage using its URL."""
         try:
-            result = await self._cloud_port.delete_document(document_url)
+            result = await self._cloud_port.delete_document(document_url, user_id)
             logger.info(
                 "cloud_manager.delete_document.completed",
                 log_type="business",

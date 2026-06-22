@@ -306,7 +306,6 @@ class AdaptiveLearningService:
             logger.info(
                 "adaptive_learning_service.problem_select.completed",
                 log_type="business",
-                student_id=student_profile.student_id,
             )
 
             return Lesson2Exercises(problem_set=selected_problem_set)
@@ -376,7 +375,6 @@ class AdaptiveLearningService:
             logger.info(
                 "adaptive_learning_service.update_student_profile.completed",
                 log_type="business",
-                student_id=student_profile.user_id,
             )
 
             return merged_preferences, merged_learning_detail

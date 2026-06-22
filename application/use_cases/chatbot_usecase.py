@@ -23,6 +23,10 @@ from domain.exceptions import (
     SyncAndCloseSessionError,
     CompressSessionHistoryError,
     ChatBotUseCaseError,
+    Lesson2SessionConflictError,
+    Lesson2ValidationError,
+    SessionClosedError,
+    SessionNotFoundError,
 )
 
 from infrastructure.logging import logger
@@ -55,8 +59,8 @@ class ChatbotUseCase:
     @staticmethod
     def _if_valid_data(user_id: str, metadata: SessionMetadata):
         # Placeholder for actual validation logic (e.g., check if user exists, session is active, etc.)
-        if not metadata: 
-            raise AuthorizationError("Session not found.")
+        if metadata is None or not metadata.session_id or not metadata.user_id:
+            raise SessionNotFoundError("Session not found.")
         if metadata.user_id != user_id:
             raise AuthorizationError("User not authorized for this session.")
 
@@ -72,70 +76,73 @@ class ChatbotUseCase:
         background_task: BackgroundTasks,
     ) -> Lesson2ChatResponse:
         """Main pipeline for processing a user message and generating a chatbot response."""
-        
+        request_metadata: SessionMetadata | None = None
+
         try:
-            history_msg = await self._session_manager.redis_get_all_messages(session_id)
-            metadata = await self._session_manager.redis_get_metadata(session_id)
-            self._if_valid_data(user_id, metadata)
-
-            is_active = metadata.is_active
-            if not is_active:
-                background_task.add_task(
-                    self._learning_service.sync_and_close_session,
+            async with self._session_manager.session_guard(session_id):
+                metadata, cached_response = await self._session_manager.prepare_lesson2_chat_request(
+                    session_id=session_id,
                     user_id=user_id,
-                    session_id=session_id,
-                    subject=subject,
-                    topic=topic,
-                    concept=concept,
-                )
-                # return because if we raise an exception here, FastAPI would not execute the background task
-                return Lesson2ChatResponse(
-                    content="This session has expired. System is syncing data and closing the session. Please start a new session to continue.",
-                    usage=None,
                     correlation_id=correlation_id,
-                    current_progress=metadata.current_progress,
                 )
+                self._if_valid_data(user_id, metadata)
+                request_metadata = metadata
 
-            if metadata.turn_count > self.TURN_THRESHOLD: 
-                MSG_TO_COMPRESS = self.TURN_TO_COMPRESS * self.MSG_PER_TURN
-                metadata = await self._learning_service.compress_session_history(
-                    session_id=session_id,
+                if cached_response is not None:
+                    return cached_response
+
+                if not metadata.is_active:
+                    raise SessionClosedError("This session is closed or expired. Please start a new session to continue.")
+
+                history_msg = await self._session_manager.redis_get_all_messages(session_id)
+
+                if metadata.turn_count > self.TURN_THRESHOLD:
+                    MSG_TO_COMPRESS = self.TURN_TO_COMPRESS * self.MSG_PER_TURN
+                    metadata = await self._learning_service.compress_session_history(
+                        session_id=session_id,
+                        history_msg=history_msg,
+                        metadata=metadata,
+                        correlation_id=correlation_id,
+                        MSG_TO_COMPRESS=MSG_TO_COMPRESS,
+                        TURN_TO_COMPRESS=self.TURN_TO_COMPRESS,
+                    )
+                    history_msg = history_msg[MSG_TO_COMPRESS:]
+
+                response_content, updated_metadata, token_usage = await self._orchestration.process(
+                    request=request,
                     history_msg=history_msg,
-                    metadata=metadata,
-                    MSG_TO_COMPRESS=MSG_TO_COMPRESS,
-                    TURN_TO_COMPRESS=self.TURN_TO_COMPRESS,
+                    session_metadata=metadata,
                 )
-                
-                await self._session_manager.redis_delete_left(session_id, limit=MSG_TO_COMPRESS)
 
-            response_content, updated_metadata, token_usage = await self._orchestration.process(
-                request=request,
-                history_msg=history_msg,
-                session_metadata=metadata,
-            )
+                updated_metadata = self._session_manager.complete_lesson2_chat_request(
+                    metadata=updated_metadata,
+                    correlation_id=correlation_id,
+                    response_content=response_content,
+                    response_usage=token_usage,
+                )
 
-            await self._session_manager.redis_save_metadata(session_id, updated_metadata)
+                user_msg_obj = Message(role=Role.USER, content=request.user_msg, correlation_id=correlation_id)
+                assistant_msg_obj = Message(role=Role.ASSISTANT, content=response_content, correlation_id=correlation_id)
+                updated_metadata.turn_count += 1
+                await self._session_manager.redis_save_turn_with_metadata(
+                    session_id=session_id,
+                    user_message=user_msg_obj,
+                    assistant_message=assistant_msg_obj,
+                    metadata=updated_metadata,
+                )
 
-            user_msg_obj = Message(role=Role.USER, content=request.user_msg)
-            assistant_msg_obj = Message(role=Role.ASSISTANT, content=response_content)
-            await self._session_manager.redis_save_turn(
-                session_id=session_id,
-                user_message=user_msg_obj,
-                assistant_message=assistant_msg_obj,
-            )
-
-            logger.info(
-                "chatbot.run.succeeded",
-                session_id=session_id,
-                log_type="info",
-                token_usage=token_usage,
-            )
-            return Lesson2ChatResponse(
-                content=response_content,
-                usage=token_usage,
-                correlation_id=correlation_id,
-                current_progress=updated_metadata.current_progress,
-            )
+                logger.info(
+                    "chatbot.run.succeeded",
+                    session_id=session_id,
+                    log_type="info",
+                    token_usage=token_usage,
+                )
+                return Lesson2ChatResponse(
+                    content=response_content,
+                    usage=token_usage,
+                    correlation_id=correlation_id,
+                    current_progress=updated_metadata.current_progress,
+                )
             
         except (
             PromptGenerationError,
@@ -153,8 +160,29 @@ class ChatbotUseCase:
                 exc_info=True,
             )
             raise ChatBotUseCaseError("Failed to process chatbot request.") from e
+
+        except (
+            AuthorizationError,
+            Lesson2ValidationError,
+            Lesson2SessionConflictError,
+            SessionClosedError,
+            SessionNotFoundError,
+        ):
+            if request_metadata is not None:
+                await self._session_manager.abandon_lesson2_chat_request(
+                    session_id=session_id,
+                    metadata=request_metadata,
+                    correlation_id=correlation_id,
+                )
+            raise
         
         except Exception as e:
+            if request_metadata is not None:
+                await self._session_manager.abandon_lesson2_chat_request(
+                    session_id=session_id,
+                    metadata=request_metadata,
+                    correlation_id=correlation_id,
+                )
             logger.error(
                 "chatbot.unexpected.failed",
                 session_id=session_id,

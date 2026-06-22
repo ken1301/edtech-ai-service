@@ -19,10 +19,11 @@ class LessonManager:
         self._exercise_store_port = exercise_store_port
         self._lesson_creation_store_port = lesson_creation_store_port
 
-    async def save_lesson_creation_metadata(self, lesson_id: str, metadata: CreateLessonMetadata) -> bool:
+    async def save_lesson_creation_metadata(self, lesson_id: str, user_id: str, metadata: CreateLessonMetadata) -> bool:
         try:
             result = await self._lesson_creation_store_port.save_lesson_creation_metadata(
                 lesson_id=lesson_id,
+                user_id=user_id,
                 metadata=metadata
             )
             logger.info(
@@ -45,9 +46,12 @@ class LessonManager:
             )
             raise LessonManagerError("Unexpected error while saving lesson creation metadata.") from e
 
-    async def get_lesson_creation_metadata(self, lesson_id: str) -> CreateLessonMetadata:
+    async def get_lesson_creation_metadata(self, lesson_id: str, user_id: str) -> CreateLessonMetadata:
         try:
-            metadata = await self._lesson_creation_store_port.get_lesson_creation_metadata(lesson_id=lesson_id)
+            metadata = await self._lesson_creation_store_port.get_lesson_creation_metadata(
+                lesson_id=lesson_id,
+                user_id=user_id,
+            )
             logger.info(
                 "lesson_manager.get_lesson_creation_metadata.completed",
                 log_type="business",
@@ -105,7 +109,10 @@ class LessonManager:
     async def get_exercise(self, exercise_id: str, user_id: str) -> Exercise:
         """Retrieve an exercise from the exercise store using its unique identifier."""
         try:
-            exercise = await self._exercise_store_port.get_exercise(exercise_id=exercise_id)
+            exercise = await self._exercise_store_port.get_exercise(
+                exercise_id=exercise_id,
+                user_id=user_id,
+            )
 
             if not exercise:
                 logger.warning(

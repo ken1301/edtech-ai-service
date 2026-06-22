@@ -1,15 +1,22 @@
+import asyncio
+from contextlib import asynccontextmanager
+from typing import Optional
+
 from domain.ports.session_store_port import SessionStorePort
 
 from domain.models.overall_models.message import Message
 from domain.models.overall_models.curriculum import Subject, Topic, Concept
 from domain.models.lesson2_models.meta import SessionMetadata
+from domain.models.overall_models.response import Lesson2ChatResponse
 
 from infrastructure.logging import logger   
 
-from domain.exceptions import SessionManagerError, SessionStoreError
+from domain.exceptions import Lesson2SessionConflictError, SessionManagerError, SessionStoreError
 
 class SessionManager:
     """Service responsible for managing session state, including syncing session data to the database and closing sessions."""
+
+    _SESSION_LOCK_TIMEOUT_SECONDS = 30
 
     def __init__(
         self,
@@ -18,10 +25,92 @@ class SessionManager:
     ):
         self._redis_store = redis_session_store
         self._mongo_store = mongo_session_store
+        self._session_locks: dict[str, asyncio.Lock] = {}
+
+    @asynccontextmanager
+    async def _local_session_guard(self, session_id: str):
+        lock = self._session_locks.setdefault(session_id, asyncio.Lock())
+        async with lock:
+            yield
+
+    @asynccontextmanager
+    async def session_guard(self, session_id: str):
+        lock_builder = getattr(self._redis_store, "build_session_lock", None)
+        if callable(lock_builder):
+            async with lock_builder(
+                session_id=session_id,
+                timeout_seconds=self._SESSION_LOCK_TIMEOUT_SECONDS,
+            ):
+                yield
+            return
+
+        async with self._local_session_guard(session_id):
+            yield
+
+    async def prepare_lesson2_chat_request(
+        self,
+        session_id: str,
+        user_id: str,
+        correlation_id: str,
+    ) -> tuple[Optional[SessionMetadata], Lesson2ChatResponse | None]:
+        """Reserve a session for one chat request or replay the last completed response."""
+        metadata = await self.redis_get_metadata(session_id)
+
+        if metadata is None or not metadata.session_id or metadata.user_id != user_id:
+            return metadata, None
+
+        if (
+            metadata.last_completed_correlation_id == correlation_id
+            and metadata.last_response_content is not None
+            and metadata.last_response_progress is not None
+        ):
+            return metadata, Lesson2ChatResponse(
+                content=metadata.last_response_content,
+                usage=list(metadata.last_response_usage),
+                correlation_id=correlation_id,
+                current_progress=metadata.last_response_progress,
+            )
+
+        if metadata.active_correlation_id == correlation_id:
+            raise Lesson2SessionConflictError("A request with this correlation_id is already in progress.")
+
+        if metadata.active_correlation_id is not None:
+            raise Lesson2SessionConflictError("Another request is already in progress for this session.")
+
+        metadata.active_correlation_id = correlation_id
+        await self.redis_save_metadata(session_id, metadata)
+        return metadata, None
+
+    async def abandon_lesson2_chat_request(
+        self,
+        session_id: str,
+        metadata: SessionMetadata,
+        correlation_id: str,
+    ):
+        """Clear an in-flight correlation marker after a failed chat request."""
+        if metadata.active_correlation_id != correlation_id:
+            return
+
+        metadata.active_correlation_id = None
+        await self.redis_save_metadata(session_id, metadata)
+
+    @staticmethod
+    def complete_lesson2_chat_request(
+        metadata: SessionMetadata,
+        correlation_id: str,
+        response_content: str,
+        response_usage: list,
+    ) -> SessionMetadata:
+        metadata.active_correlation_id = None
+        metadata.last_completed_correlation_id = correlation_id
+        metadata.last_response_content = response_content
+        metadata.last_response_usage = list(response_usage)
+        metadata.last_response_progress = metadata.current_progress
+        return metadata
 
     # ================= Redis operations =================
 
-    async def redis_get_metadata(self, session_id: str) -> SessionMetadata:
+    async def redis_get_metadata(self, session_id: str) -> Optional[SessionMetadata]:
         """Get session metadata from Redis."""
         try: 
             metadata = await self._redis_store.get_metadata(session_id)
@@ -72,6 +161,71 @@ class SessionManager:
                 exc_info=True,
             )
             raise SessionManagerError("Unexpected error while saving session metadata to Redis.") from e
+
+    async def redis_mark_session_closing(self, session_id: str, user_id: str) -> tuple[Optional[SessionMetadata], bool]:
+        """Mark a session as closing exactly once and return (metadata, newly_marked)."""
+        try:
+            async with self.session_guard(session_id):
+                metadata = await self._redis_store.get_metadata(session_id)
+                if not metadata or not metadata.session_id or metadata.user_id != user_id:
+                    return metadata, False
+
+                if metadata.closed_at is not None:
+                    return metadata, False
+
+                if metadata.is_closing:
+                    return metadata, False
+
+                metadata.is_closing = True
+                metadata.is_active = False
+                if metadata.expired_at is None and metadata.created_at is None:
+                    metadata.expired_at = None
+                await self._redis_store.save_metadata(session_id, metadata)
+
+            logger.info(
+                "session_manager.redis_mark_session_closing.completed",
+                log_type="business",
+                session_id=session_id,
+            )
+            return metadata, True
+
+        except SessionStoreError as e:
+            raise SessionManagerError("Failed to mark session as closing in Redis.") from e
+
+        except Exception as e:
+            logger.error(
+                "session_manager.redis_mark_session_closing.unexpected.failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+                exc_info=True,
+            )
+            raise SessionManagerError("Unexpected error while marking session as closing in Redis.") from e
+
+    async def redis_list_sessions_pending_expiration_sync(self) -> list[SessionMetadata]:
+        """Return expired active sessions that still need sync-and-close processing."""
+        list_sessions = getattr(self._redis_store, "list_sessions_pending_expiration_sync", None)
+        if not callable(list_sessions):
+            return []
+
+        try:
+            sessions = await list_sessions()
+            logger.info(
+                "session_manager.redis_list_sessions_pending_expiration_sync.completed",
+                log_type="business",
+                session_count=len(sessions),
+            )
+            return sessions
+        except SessionStoreError as e:
+            raise SessionManagerError("Failed to scan Redis for expired sessions pending sync.") from e
+        except Exception as e:
+            logger.error(
+                "session_manager.redis_list_sessions_pending_expiration_sync.unexpected.failed",
+                log_type="technical",
+                error=str(e),
+                exc_info=True,
+            )
+            raise SessionManagerError("Unexpected error while scanning Redis for expired sessions pending sync.") from e
 
     async def redis_get_all_messages(self, session_id: str) -> list[Message]:
         """Get the full message history for a session from Redis."""
@@ -154,6 +308,41 @@ class SessionManager:
                 exc_info=True,
             )
             raise SessionManagerError("Unexpected error while saving message turn to Redis.") from e
+
+    async def redis_save_turn_with_metadata(
+        self,
+        session_id: str,
+        user_message: Message,
+        assistant_message: Message,
+        metadata: SessionMetadata,
+    ):
+        """Persist a completed turn and updated metadata together so turn_count stays aligned."""
+        try:
+            await self._redis_store.save_turn_with_metadata(
+                session_id=session_id,
+                user_message=user_message,
+                assistant_message=assistant_message,
+                metadata=metadata,
+            )
+
+            logger.info(
+                "session_manager.redis_save_turn_with_metadata.completed",
+                log_type="business",
+                session_id=session_id,
+            )
+
+        except SessionStoreError as e:
+            raise SessionManagerError("Failed to save message turn and metadata to Redis.") from e
+
+        except Exception as e:
+            logger.error(
+                "session_manager.redis_save_turn_with_metadata.unexpected.failed",
+                log_type="technical",
+                session_id=session_id,
+                error=str(e),
+                exc_info=True,
+            )
+            raise SessionManagerError("Unexpected error while saving message turn and metadata to Redis.") from e
     
     
     async def redis_get_left(self, session_id: str, limit: int) -> list[Message]:
@@ -238,7 +427,9 @@ class SessionManager:
         messages: list[Message],
         subject: Subject,
         topic: Topic,
-        concept: Concept
+        concept: Concept,
+        archive_kind: str,
+        archive_request_id: str,
     ):
         """Save the messages when compressing session history"""
 
@@ -249,7 +440,9 @@ class SessionManager:
                 messages=messages,
                 subject=subject,
                 topic=topic,
-                concept=concept
+                concept=concept,
+                archive_kind=archive_kind,
+                archive_request_id=archive_request_id,
             )
 
             logger.info(
@@ -274,16 +467,17 @@ class SessionManager:
             )
             raise SessionManagerError("Unexpected error while saving messages to MongoDB.") from e
         
-    async def mongo_get_history_messages(self, session_id: str) -> list[Message]:
+    async def mongo_get_history_messages(self, session_id: str, user_id: str) -> list[Message]:
         """Get all session messages from MongoDB (used for session summarization when closing session)"""
 
         try:
-            messages = await self._mongo_store.get_history_messages(session_id)
+            messages = await self._mongo_store.get_history_messages(session_id, user_id)
 
             logger.info(
                 "session_manager.mongo_get_history_messages.completed",
                 log_type="business",
                 session_id=session_id,
+                user_id=user_id,
             )
 
             return messages
@@ -296,6 +490,7 @@ class SessionManager:
                 "session_manager.mongo_get_history_messages.unexpected.failed",
                 log_type="technical",
                 session_id=session_id,
+                user_id=user_id,
                 error=str(e),
                 exc_info=True,
             )

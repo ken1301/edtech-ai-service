@@ -1,4 +1,5 @@
 from typing import Dict, Any, List, Optional
+from datetime import timezone
 
 from application.stateless_services.llm_manager import LLMManager
 from application.services.session_manager import SessionManager
@@ -18,6 +19,9 @@ from domain.exceptions import (
     SessionManagerError,
     ProfileManagerError,
     PromptGenerationError,
+    SessionClosingError,
+    SessionClosedError,
+    SessionNotFoundError,
     SyncAndCloseSessionError,
     CompressSessionHistoryError,
 )
@@ -44,64 +48,130 @@ class LearningService:
         self._profile_manager = profile_manager
         self._adaptive_learning_service = adaptive_learning_service
 
+    @staticmethod
+    def _expired_session_correlation_id(metadata: SessionMetadata) -> str:
+        anchor = metadata.expired_at or metadata.created_at
+        if anchor is None:
+            return f"expiry:{metadata.session_id}"
+        if anchor.tzinfo is None:
+            anchor = anchor.replace(tzinfo=timezone.utc)
+        return f"expiry:{metadata.session_id}:{anchor.isoformat()}"
+
+    async def sync_expired_sessions(self) -> int:
+        """Find expired sessions that have not yet been closed, then mark and sync them exactly once."""
+        expired_sessions = await self._session_manager.redis_list_sessions_pending_expiration_sync()
+        processed = 0
+
+        for metadata in expired_sessions:
+            try:
+                marked_metadata, newly_marked = await self._session_manager.redis_mark_session_closing(
+                    session_id=metadata.session_id,
+                    user_id=metadata.user_id,
+                )
+                if not newly_marked:
+                    continue
+
+                await self.sync_and_close_session(
+                    user_id=metadata.user_id,
+                    session_id=metadata.session_id,
+                    correlation_id=self._expired_session_correlation_id(marked_metadata),
+                    subject=marked_metadata.subject,
+                    topic=marked_metadata.topic,
+                    concept=marked_metadata.concept,
+                )
+                processed += 1
+            except (SessionManagerError, SyncAndCloseSessionError, SessionNotFoundError, SessionClosedError, SessionClosingError) as e:
+                logger.error(
+                    "sync_expired_sessions.session_failed",
+                    log_type="technical",
+                    session_id=metadata.session_id,
+                    user_id=metadata.user_id,
+                    error=str(e),
+                    exc_info=True,
+                )
+
+        logger.info(
+            "sync_expired_sessions.completed",
+            log_type="business",
+            processed=processed,
+            discovered=len(expired_sessions),
+        )
+        return processed
+
         
     async def sync_and_close_session(
         self,
         user_id: str,
         session_id: str,
+        correlation_id: str,
         subject: Subject,
         topic: Topic,
         concept: Concept,
     ):
         """Background task to sync session data, summarize session, and perform any necessary cleanup when a session expires."""
-        
+
         try:
-            history_msg = await self._session_manager.redis_get_all_messages(session_id=session_id)
-            metadata = await self._session_manager.redis_get_metadata(session_id=session_id)
+            async with self._session_manager.session_guard(session_id):
+                metadata = await self._session_manager.redis_get_metadata(session_id=session_id)
 
-            # 1. Save the remaining session history to MongoDB for long-term storage and analysis 
-            await self._session_manager.mongo_save_messages(
-                user_id=user_id,
-                session_id=session_id,
-                messages=history_msg,
-                subject=subject,
-                topic=topic,
-                concept=concept
-            )
+                if metadata is None or not metadata.session_id or metadata.user_id != user_id:
+                    raise SessionNotFoundError("Session not found.")
 
-            # 2. Generate session summary using LLM  
-            summarize_input = self._build_summarization_input(
-                history_msg=history_msg,
-                session_metadata=metadata,
-            )
-            summarize_prompt = await self._prompt_builder.lesson2_summarize_prompt(**summarize_input.model_dump())
-            session_summary = await self._llm_manager.generate_response(
-                system_prompt=summarize_prompt,
-                messages=[],
-                conversation_context=self.conversation_context,
-                response_model=SessionSummary
-            )
-            
-            # 3. Save the student profile to MongoDB
-            student_profile = await self._profile_manager.get_student_profile(user_id=user_id)
-            student_preference, learning_detail = await self._adaptive_learning_service.update_student_profile(
-                session_summary=session_summary,
-                student_profile=student_profile
-            )
+                if metadata.closed_at is not None:
+                    raise SessionClosedError("Session is already closed.")
 
-            await self._profile_manager.update_student_profile(
-                user_id=user_id,
-                subject=subject,
-                topic=topic,
-                concept=concept,
-                student_preference=student_preference,
-                learning_detail=learning_detail
-            )
+                if not metadata.is_closing:
+                    raise SessionClosingError("Session must be marked closing before sync and close runs.")
 
-            # 4. Disable session and delete the session data from Redis to free up memory
-            metadata.is_active = False
-            await self._session_manager.redis_save_metadata(session_id, metadata)
-            await self._session_manager.redis_delete_session(session_id)
+                history_msg = await self._session_manager.redis_get_all_messages(session_id=session_id)
+
+                # 1. Save the remaining session history to MongoDB for long-term storage and analysis
+                await self._session_manager.mongo_save_messages(
+                    user_id=user_id,
+                    session_id=session_id,
+                    messages=history_msg,
+                    subject=subject,
+                    topic=topic,
+                    concept=concept,
+                    archive_kind="close",
+                    archive_request_id=correlation_id,
+                )
+
+                # 2. Generate session summary using LLM
+                summarize_input = self._build_summarization_input(
+                    history_msg=history_msg,
+                    session_metadata=metadata,
+                )
+                summarize_prompt = await self._prompt_builder.lesson2_summarize_prompt(**summarize_input.model_dump())
+                session_summary = await self._llm_manager.generate_response(
+                    system_prompt=summarize_prompt,
+                    messages=[],
+                    conversation_context=self.conversation_context,
+                    response_model=SessionSummary
+                )
+
+                # 3. Save the student profile to MongoDB
+                student_profile = await self._profile_manager.get_student_profile(user_id=user_id)
+                student_preference, learning_detail = await self._adaptive_learning_service.update_student_profile(
+                    session_summary=session_summary,
+                    student_profile=student_profile
+                )
+
+                await self._profile_manager.update_student_profile(
+                    user_id=user_id,
+                    subject=subject,
+                    topic=topic,
+                    concept=concept,
+                    student_preference=student_preference,
+                    learning_detail=learning_detail
+                )
+
+                # 4. Disable session and delete the session data from Redis to free up memory
+                metadata.is_active = False
+                metadata.is_closing = False
+                metadata.closed_at = metadata.closed_at or __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+                await self._session_manager.redis_save_metadata(session_id, metadata)
+                await self._session_manager.redis_delete_session(session_id)
 
             logger.info(
                 "sync_and_close_session.completed",
@@ -111,6 +181,9 @@ class LearningService:
 
         except (LLMManagerError, SessionManagerError, ProfileManagerError, PromptGenerationError) as e:
             raise SyncAndCloseSessionError("Failed to sync and close the session.") from e
+
+        except (SessionNotFoundError, SessionClosedError, SessionClosingError):
+            raise
 
         except Exception as e:
             logger.error(
@@ -127,6 +200,7 @@ class LearningService:
         session_id: str,
         history_msg: List[Message],
         metadata: SessionMetadata,
+        correlation_id: str,
         MSG_TO_COMPRESS: int,
         TURN_TO_COMPRESS: int,
     ) -> SessionMetadata:
@@ -152,7 +226,9 @@ class LearningService:
                 messages=history_msg[:MSG_TO_COMPRESS], # save the raw messages except the last TURN_TO_KEEP turns which are kept for better context
                 subject=metadata.subject,
                 topic=metadata.topic,
-                concept=metadata.concept
+                concept=metadata.concept,
+                archive_kind="compression",
+                archive_request_id=correlation_id,
             )
 
             await self._session_manager.redis_delete_left(session_id, limit=MSG_TO_COMPRESS)
