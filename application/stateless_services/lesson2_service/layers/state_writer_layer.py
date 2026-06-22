@@ -27,9 +27,9 @@ class StateWriterLayer:
     source of truth, and computes the progress delta on submission (Task 5)."""
 
     # Progress hyperparameters (4 problems -> 100%). Tunable.
-    PROGRESS_PER_PROBLEM = 25.0   # cap each problem can contribute
-    CORRECT_OPTIMAL = 25.0        # right answer via a correct/strong approach
-    CORRECT_WEAK = 18.0           # right answer via a weak/odd approach
+    PROGRESS_BY_PROBLEM_INDEX = (20.0, 25.0, 30.0, 25.0)
+    CORRECT_OPTIMAL = 30.0        # correct submissions fill the current problem's cap
+    CORRECT_WEAK = 30.0           # correct submissions fill the current problem's cap
     INCORRECT = 8.0               # wrong answer but a genuine attempt ("Done > Perfect")
     FARMING = 0.0                 # detected farming -> progress paused (§1.6)
     MAX_PROGRESS = 100.0
@@ -52,6 +52,9 @@ class StateWriterLayer:
                 log_type="debug",
                 session_id=session_metadata.session_id,
             )
+
+            if session_metadata.current_problem_id is None and session_metadata.problem_list:
+                session_metadata.current_problem_id = session_metadata.problem_list[0].problem_id
 
             problem_state = self._ensure_problem_state(session_metadata)
 
@@ -179,8 +182,11 @@ class StateWriterLayer:
         if problem_state is None:
             return
 
+        if request.submission_data is None:
+            raise Lesson2LayerError("Submission state requires submission_data.")
+
         result_status = request.submission_data.status
-        is_farming, _ = request.submission_data.is_process_farm
+        is_farming, _ = request.submission_data.is_progress_farm
         verdict = ground_output.approach_verdict
 
         problem_state.submission_state.append(
@@ -190,7 +196,7 @@ class StateWriterLayer:
                 approach_verdict=verdict.value,
                 matched_approach_id=ground_output.matched_approach_id,
                 matched_weakness=ground_output.matched_weakness,
-                farming_signal=request.submission_data.is_process_farm,
+                farming_signal=request.submission_data.is_progress_farm,
             )
         )
         problem_state.approach_trial_count += 1
@@ -222,7 +228,7 @@ class StateWriterLayer:
         if delta <= 0:
             return
         # Cap per-problem contribution, then cap session total.
-        room = self.PROGRESS_PER_PROBLEM - problem_state.awarded_progress
+        room = self._problem_progress_cap(session_metadata) - problem_state.awarded_progress
         granted = max(0.0, min(delta, room))
         if granted <= 0:
             return
@@ -230,6 +236,19 @@ class StateWriterLayer:
         session_metadata.current_progress = min(
             self.MAX_PROGRESS, session_metadata.current_progress + granted
         )
+
+    def _problem_progress_cap(self, session_metadata: SessionMetadata) -> float:
+        current_problem_id = session_metadata.current_problem_id
+        if current_problem_id is None:
+            return self.PROGRESS_BY_PROBLEM_INDEX[0]
+
+        for index, problem in enumerate(session_metadata.problem_list):
+            if problem.problem_id == current_problem_id:
+                if index < len(self.PROGRESS_BY_PROBLEM_INDEX):
+                    return self.PROGRESS_BY_PROBLEM_INDEX[index]
+                break
+
+        return self.PROGRESS_BY_PROBLEM_INDEX[-1]
 
     @staticmethod
     def _advance_problem(session_metadata: SessionMetadata) -> None:

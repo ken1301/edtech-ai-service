@@ -100,5 +100,5 @@ class SafetyDivert:
             current_progress=session_metadata.current_progress,
             classify=classify_output,
             is_submission=request.is_submission,
-            recent_messages=list(history_msg or []),
+            recent_messages=(history_msg or []),
         )

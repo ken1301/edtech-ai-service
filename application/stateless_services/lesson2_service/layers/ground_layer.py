@@ -4,7 +4,7 @@ from application.stateless_services.llm_manager import LLMManager
 from domain.models.lesson2_models.ground import GroundInput, GroundOutput
 from domain.models.lesson2_models.common import Lesson2LayerUsage
 
-from domain.exceptions import Lesson2LayerError, LLMManagerError
+from domain.exceptions import Lesson2LayerError, LLMManagerError, LLMManagerStructuredOutputError
 
 from infrastructure.logging import logger
 
@@ -31,6 +31,16 @@ class GroundLayer:
 
 
             return Lesson2LayerUsage(output=llm_response.content, usage=llm_response.usage)
+
+        except LLMManagerStructuredOutputError as e:
+            logger.warning(
+                "ground_layer.structured_output_not_degraded",
+                log_type="technical",
+                error=str(e),
+            )
+            # Ground is correctness-sensitive: a fabricated fallback verdict would corrupt
+            # submission evaluation, progress bookkeeping, and downstream response logic.
+            raise Lesson2LayerError("Grounding requires a valid structured verdict.") from e
 
         except LLMManagerError as e:
             raise Lesson2LayerError("LLM Manager failed to generate grounding.") from e

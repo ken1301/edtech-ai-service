@@ -12,11 +12,16 @@ from domain.models.lesson2_models.meta import SessionMetadata, Lesson2Request
 from domain.models.overall_models.message import Message
 from domain.models.overall_models.response import TokenUsage
 
-from domain.exceptions import Lesson2PipelineError, Lesson2OrchestrationError
+from domain.exceptions import (
+    Lesson2OrchestrationError,
+    Lesson2PipelineError,
+    Lesson2SessionConflictError,
+    Lesson2ValidationError,
+)
 
 from infrastructure.logging import logger
 
-RECENT_MESSAGE_WINDOW = 6
+RECENT_MESSAGE_WINDOW = 4
 
 class Lesson2Orchestration:
     """Routes a request to the right path (safety / fast-path / full pipeline) per overall.md §2.2.
@@ -110,9 +115,12 @@ class Lesson2Orchestration:
     ) -> Tuple[Optional[GroundOutput], Optional[TokenUsage]]:
         """Build GroundInput from the current problem + the student's running reasoning (from
         metadata) and the result_status from NestJS, then run the Ground judge."""
+        if request.submission_data is None:
+            raise Lesson2ValidationError("Submission turns require submission_data.")
+
         problem = _current_problem(session_metadata)
         if problem is None:
-            return None, None
+            raise Lesson2SessionConflictError("Submission turn requires an active current problem.")
 
         ground_input = GroundInput(
             problem_question=problem.question,
@@ -134,7 +142,6 @@ class Lesson2Orchestration:
     ) -> Tuple[ClassifyOutput, Optional[TokenUsage]]:
         """Build ClassifyInput from the message + recent history + current problem context."""
         classify_input = ClassifyInput(
-            user_msg=request.user_msg,
             is_submission=request.is_submission,
             submission_data=request.submission_data,
             recent_messages=(history_msg or [])[-RECENT_MESSAGE_WINDOW:],

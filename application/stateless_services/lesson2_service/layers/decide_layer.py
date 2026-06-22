@@ -85,7 +85,7 @@ class DecideLayer:
             verdict = input.ground_output.approach_verdict
 
             # attempt limit reached on a wrong submission -> soft intervention (§1.5)
-            attempts_exhausted = input.attempts_made >= input.max_attempts
+            attempts_exhausted = input.attempts_made + 1 >= input.max_attempts
 
             if verdict == ApproachVerdict.CORRECT and result_ok:
                 # correct result via correct approach -> confirm + advance
