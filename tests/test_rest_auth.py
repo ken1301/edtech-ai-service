@@ -51,6 +51,23 @@ class _Request:
 
 
 class RestAuthTests(unittest.IsolatedAsyncioTestCase):
+    async def test_internal_authenticated_user_header_bypasses_bearer_token_verification(self):
+        request = _Request(
+            headers={
+                "X-API-Key": _Config.AI_SERVICE_API_KEY,
+                "X-Authenticated-User-ID": "teacher-123",
+                "X-Authenticated-Username": "alice",
+                "X-Authenticated-Role": "teacher",
+            }
+        )
+
+        authenticated_user = await get_authenticated_user(request)
+
+        self.assertEqual(authenticated_user.user_id, "teacher-123")
+        self.assertEqual(authenticated_user.username, "alice")
+        self.assertEqual(authenticated_user.role, "teacher")
+        self.assertEqual(request.state.auth_user_id, "teacher-123")
+
     async def test_authenticated_user_is_derived_from_verified_jwt(self):
         token = _jwt(_Config.JWT_SECRET, {"sub": "user-123", "username": "alice", "role": "student"})
         request = _Request(

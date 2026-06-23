@@ -3,8 +3,8 @@ import unittest
 from fastapi import HTTPException
 
 from adapters.inbound.rest.auth import AuthenticatedUser
-from adapters.inbound.rest.create_lesson_router import extract_document, extract_exercises
-from adapters.inbound.rest.schemas import DocumentExtractionRequest, ExerciseExtractionRequest
+from adapters.inbound.rest.create_lesson_router import extract_document, extract_exercises, finalize_lesson
+from adapters.inbound.rest.schemas import DocumentExtractionRequest, ExerciseExtractionRequest, FinalizeLessonRequest
 from domain.exceptions import CreateLessonUseCaseError
 from domain.models.lesson2_models.common import Phase
 from domain.models.lesson2_models.exercise import Approach, Exercise as Lesson2Exercise, ExercisePattern, Problem
@@ -28,17 +28,21 @@ from domain.models.overall_models.lesson1 import (
     Lesson1Knowledge,
     Lesson1Summary,
 )
-from domain.models.overall_models.response import Lesson1CreationResponse, Lesson2ExerciseExtractionResponse
+from domain.models.overall_models.response import (
+    FinalizeLessonResponse,
+    Lesson1CreationResponse,
+    Lesson2ExerciseExtractionOutput,
+    Lesson2ExerciseExtractionResponse,
+)
 from domain.models.overall_models.token_usage import TokenUsage
 
 
 def _document_request() -> DocumentExtractionRequest:
     return DocumentExtractionRequest(
         user_id="user-1",
-        correlation_id="corr-1",
         lesson_id="lesson-1",
         document_url="https://example.com/lesson.pdf",
-        previous_lesson=[],
+        previous_lessons=[],
         subject=Subject.IT,
         topic=Topic.PROGRAMMING,
         concept=Concept.FUNCTIONS,
@@ -48,7 +52,6 @@ def _document_request() -> DocumentExtractionRequest:
 def _exercise_request() -> ExerciseExtractionRequest:
     return ExerciseExtractionRequest(
         user_id="user-1",
-        correlation_id="corr-2",
         lesson_id="lesson-1",
         document_url="https://example.com/lesson.pdf",
         subject=Subject.IT,
@@ -57,8 +60,13 @@ def _exercise_request() -> ExerciseExtractionRequest:
     )
 
 
+def _finalize_request() -> FinalizeLessonRequest:
+    return FinalizeLessonRequest(user_id="user-1", lesson_id="lesson-1")
+
+
 def _lesson1_response() -> Lesson1CreationResponse:
     return Lesson1CreationResponse(
+        exercise_id="lesson-1:lesson1",
         output=Lesson1CreationOutput(
             user_id="user-1",
             knowledge=Lesson1Knowledge(
@@ -95,7 +103,6 @@ def _lesson1_response() -> Lesson1CreationResponse:
             ),
         ),
         usage=TokenUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        correlation_id="corr-1",
     )
 
 
@@ -142,26 +149,31 @@ def _lesson2_response() -> Lesson2ExerciseExtractionResponse:
 
     return Lesson2ExerciseExtractionResponse(
         exercise_id="lesson-1",
-        output=Lesson2Exercise(
-            problem_list=problem_list,
-            subject=Subject.IT,
-            topic=Topic.PROGRAMMING,
-            concept=Concept.FUNCTIONS,
-            user_id="user-1",
+        output=Lesson2ExerciseExtractionOutput(
+            exercise=Lesson2Exercise(
+                problem_list=problem_list,
+                subject=Subject.IT,
+                topic=Topic.PROGRAMMING,
+                concept=Concept.FUNCTIONS,
+                user_id="user-1",
+            ),
+            summary="Generated 8 lesson 2 problems for functions.",
         ),
         usage=TokenUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
-        correlation_id="corr-2",
     )
 
 
 class _CreateLessonManagerStub:
-    def __init__(self, lesson1_response=None, lesson2_response=None, lesson1_error=None, lesson2_error=None):
+    def __init__(self, lesson1_response=None, lesson2_response=None, finalize_response=None, lesson1_error=None, lesson2_error=None, finalize_error=None):
         self.lesson1_response = lesson1_response
         self.lesson2_response = lesson2_response
+        self.finalize_response = finalize_response
         self.lesson1_error = lesson1_error
         self.lesson2_error = lesson2_error
+        self.finalize_error = finalize_error
         self.lesson1_calls = []
         self.lesson2_calls = []
+        self.finalize_calls = []
 
     async def lesson1_run(self, **kwargs):
         self.lesson1_calls.append(kwargs)
@@ -174,6 +186,12 @@ class _CreateLessonManagerStub:
         if self.lesson2_error is not None:
             raise self.lesson2_error
         return self.lesson2_response
+
+    async def finalize_run(self, **kwargs):
+        self.finalize_calls.append(kwargs)
+        if self.finalize_error is not None:
+            raise self.finalize_error
+        return self.finalize_response
 
 
 class CreateLessonRouterContractTests(unittest.IsolatedAsyncioTestCase):
@@ -199,7 +217,7 @@ class CreateLessonRouterContractTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertIsInstance(response, Lesson1CreationResponse)
-        self.assertEqual(response.correlation_id, "corr-1")
+        self.assertEqual(response.exercise_id, "lesson-1:lesson1")
         self.assertEqual(manager.lesson1_calls[0]["user_id"], "user-1")
         self.assertEqual(manager.lesson1_calls[0]["lesson_id"], "lesson-1")
 
@@ -229,7 +247,6 @@ class CreateLessonRouterContractTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsInstance(response, Lesson2ExerciseExtractionResponse)
         self.assertEqual(response.exercise_id, "lesson-1")
-        self.assertEqual(response.correlation_id, "corr-2")
         self.assertEqual(manager.lesson2_calls[0]["user_id"], "user-1")
         self.assertEqual(manager.lesson2_calls[0]["lesson_id"], "lesson-1")
 
@@ -259,6 +276,44 @@ class CreateLessonRouterContractTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(context.exception.status_code, 500)
         self.assertEqual(context.exception.detail, "Failed to fetch document from cloud storage.")
+
+    async def test_finalize_lesson_forwards_authenticated_user(self):
+        manager = _CreateLessonManagerStub(
+            finalize_response=FinalizeLessonResponse(
+                status="published",
+                lesson_id="lesson-1",
+                lesson1_exercise_id="lesson-1:lesson1",
+                lesson2_exercise_id="lesson-1",
+            )
+        )
+
+        response = await finalize_lesson(
+            request=_finalize_request(),
+            authenticated_user=AuthenticatedUser(user_id="user-1"),
+            lesson_creation_manager=manager,
+        )
+
+        self.assertEqual(response.status, "published")
+        self.assertEqual(manager.finalize_calls[0], {"user_id": "user-1", "lesson_id": "lesson-1"})
+
+    async def test_finalize_lesson_rejects_authenticated_user_mismatch(self):
+        manager = _CreateLessonManagerStub(
+            finalize_response=FinalizeLessonResponse(
+                status="published",
+                lesson_id="lesson-1",
+                lesson1_exercise_id="lesson-1:lesson1",
+                lesson2_exercise_id="lesson-1",
+            )
+        )
+
+        with self.assertRaises(HTTPException) as context:
+            await finalize_lesson(
+                request=_finalize_request(),
+                authenticated_user=AuthenticatedUser(user_id="user-2"),
+                lesson_creation_manager=manager,
+            )
+
+        self.assertEqual(context.exception.status_code, 403)
 
 
 if __name__ == "__main__":

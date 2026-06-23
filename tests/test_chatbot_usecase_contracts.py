@@ -54,7 +54,6 @@ class _SessionManagerStub:
             return self.metadata, Lesson2ChatResponse(
                 content=self.metadata.last_response_content,
                 usage=list(self.metadata.last_response_usage),
-                correlation_id=correlation_id,
                 current_progress=self.metadata.last_response_progress or 0.0,
             )
         if self.metadata.active_correlation_id == correlation_id:

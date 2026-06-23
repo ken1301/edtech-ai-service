@@ -34,6 +34,18 @@ class _FakeS3Client:
 
 
 class DocumentOwnershipTests(unittest.TestCase):
+    def test_download_uses_shared_default_bucket_name(self):
+        client = _FakeS3Client()
+        adapter = S3Adapter(s3_client=client)
+
+        document = adapter._download_pdf(
+            "http://localhost:9000/edtech/users/user-1/file.pdf",
+            "user-1",
+        )
+
+        self.assertEqual(document.id, "user-1")
+        self.assertEqual(client.get_object_calls, [("edtech", "users/user-1/file.pdf")])
+
     def test_download_rejects_other_user_prefix(self):
         adapter = S3Adapter(s3_client=_FakeS3Client(), bucket_name="edtech")
 
@@ -46,6 +58,18 @@ class DocumentOwnershipTests(unittest.TestCase):
 
         document = adapter._download_pdf(
             "http://localhost:9000/edtech/users/user-1/pdfs/doc-1/file.pdf",
+            "user-1",
+        )
+
+        self.assertEqual(document.id, "doc-1")
+        self.assertEqual(client.get_object_calls, [("edtech", "users/user-1/pdfs/doc-1/file.pdf")])
+
+    def test_download_accepts_legacy_uploads_prefix_for_matching_user(self):
+        client = _FakeS3Client()
+        adapter = S3Adapter(s3_client=client, bucket_name="edtech")
+
+        document = adapter._download_pdf(
+            "http://localhost:9000/edtech/uploads/users/user-1/pdfs/doc-1/file.pdf",
             "user-1",
         )
 

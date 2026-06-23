@@ -1,15 +1,17 @@
 import unittest
 
 from fastapi import BackgroundTasks, HTTPException
+import structlog
 
 from adapters.inbound.rest.auth import AuthenticatedUser
 from adapters.inbound.rest.lesson2_router import chat, select_exercises, sync_and_close
 from adapters.inbound.rest.schemas import ExerciseSelectionRequest, SyncAndCloseRequest
-from domain.exceptions import Lesson2ValidationError
+from domain.exceptions import Lesson2ValidationError, LessonManagerError
 from domain.models.lesson2_models.exercise import Approach, ExercisePattern, Lesson2Exercises, Problem
 from domain.models.lesson2_models.meta import Lesson2Request, SessionMetadata
 from domain.models.overall_models.common import BloomLevel, ConceptType, Constraint, ProblemRole, Representation
 from domain.models.lesson2_models.meta import SessionMetadata
+from domain.models.overall_models.profile import StudentProfile
 from domain.models.overall_models.response import Lesson2ChatResponse
 from domain.models.overall_models.curriculum import Concept, Subject, Topic
 
@@ -46,7 +48,6 @@ class _ChatbotManagerStub:
         self.response = response or Lesson2ChatResponse(
             content="Tutor reply",
             usage=[],
-            correlation_id="corr-1",
             current_progress=15.0,
         )
         self.error = error
@@ -63,8 +64,8 @@ class _LessonManagerStub:
     def __init__(self):
         self.calls = []
 
-    async def get_exercise(self, exercise_id: str, user_id: str):
-        self.calls.append((exercise_id, user_id))
+    async def get_public_exercise(self, exercise_id: str):
+        self.calls.append(exercise_id)
         return object()
 
 
@@ -120,7 +121,6 @@ def _request() -> SyncAndCloseRequest:
     return SyncAndCloseRequest(
         user_id="user-1",
         session_id="session-1",
-        correlation_id="corr-1",
         subject=Subject.IT,
         topic=Topic.PROGRAMMING,
         concept=Concept.FUNCTIONS,
@@ -145,7 +145,6 @@ def _selection_request(user_id: str = "user-1") -> ExerciseSelectionRequest:
     return ExerciseSelectionRequest(
         exercise_id="exercise-1",
         user_id=user_id,
-        correlation_id="corr-2",
     )
 
 
@@ -183,15 +182,17 @@ class Lesson2RouterContractTests(unittest.IsolatedAsyncioTestCase):
     async def test_sync_and_close_returns_accepted_payload(self):
         learning_service = _LearningServiceStub()
         background_tasks = BackgroundTasks()
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(correlation_id="corr-1")
         response = await sync_and_close(
             request=_request(),
             background_tasks=background_tasks,
             authenticated_user=AuthenticatedUser(user_id="user-1"),
             learning_service=learning_service,
         )
+        structlog.contextvars.clear_contextvars()
 
         self.assertEqual(response.status, "accepted")
-        self.assertEqual(response.correlation_id, "corr-1")
         self.assertEqual(len(background_tasks.tasks), 1)
         self.assertEqual(background_tasks.tasks[0].kwargs["correlation_id"], "corr-1")
 
@@ -204,6 +205,8 @@ class Lesson2RouterContractTests(unittest.IsolatedAsyncioTestCase):
         )
         learning_service = _LearningServiceStub(metadata=metadata)
         background_tasks = BackgroundTasks()
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(correlation_id="corr-1")
 
         response = await sync_and_close(
             request=_request(),
@@ -211,6 +214,7 @@ class Lesson2RouterContractTests(unittest.IsolatedAsyncioTestCase):
             authenticated_user=AuthenticatedUser(user_id="user-1"),
             learning_service=learning_service,
         )
+        structlog.contextvars.clear_contextvars()
 
         self.assertEqual(response.status, "closing")
         self.assertEqual(len(background_tasks.tasks), 0)
@@ -229,7 +233,7 @@ class Lesson2RouterContractTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([problem.problem_id for problem in response], [1, 2, 3, 4])
         self.assertEqual(profile_manager.calls, ["user-1"])
-        self.assertEqual(lesson_manager.calls, [("exercise-1", "user-1")])
+        self.assertEqual(lesson_manager.calls, ["exercise-1"])
 
     async def test_select_exercises_rejects_authenticated_user_mismatch(self):
         with self.assertRaises(HTTPException) as context:
@@ -242,6 +246,37 @@ class Lesson2RouterContractTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(context.exception.status_code, 403)
+
+    async def test_select_exercises_maps_missing_published_lesson_to_404(self):
+        class _MissingLessonManagerStub:
+            async def get_public_exercise(self, exercise_id: str):
+                raise LessonManagerError(f"Published lesson 2 exercise with ID '{exercise_id}' not found.")
+
+        with self.assertRaises(HTTPException) as context:
+            await select_exercises(
+                request=_selection_request(),
+                authenticated_user=AuthenticatedUser(user_id="user-1"),
+                lesson_manager=_MissingLessonManagerStub(),
+                profile_manager=_ProfileManagerStub(),
+                adaptive_learning_service=_AdaptiveLearningServiceStub(),
+            )
+
+        self.assertEqual(context.exception.status_code, 404)
+
+    async def test_select_exercises_accepts_default_student_profile_shape(self):
+        class _MissingProfileManagerStub:
+            async def get_student_profile(self, user_id: str):
+                return StudentProfile(user_id=user_id)
+
+        response = await select_exercises(
+            request=_selection_request(),
+            authenticated_user=AuthenticatedUser(user_id="user-1"),
+            lesson_manager=_LessonManagerStub(),
+            profile_manager=_MissingProfileManagerStub(),
+            adaptive_learning_service=_AdaptiveLearningServiceStub(),
+        )
+
+        self.assertEqual([problem.problem_id for problem in response], [1, 2, 3, 4])
 
 
 if __name__ == "__main__":

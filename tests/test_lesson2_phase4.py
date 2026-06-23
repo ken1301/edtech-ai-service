@@ -14,7 +14,7 @@ from domain.models.lesson2_models.evaluate import AffectiveState, EvaluateInput,
 from domain.models.lesson2_models.ground import GroundOutput, ApproachVerdict
 from domain.models.lesson2_models.meta import ApproachState, Lesson2Request, PerProblemState, SessionMetadata, SubmissionRecord
 from domain.models.lesson2_models.response import ResponseInput
-from domain.models.lesson2_models.common import Phase, ProcessState, ResponseClass
+from domain.models.lesson2_models.common import Phase, ProcessState, ResponseClass, SubmissionData
 from domain.models.overall_models.common import BloomLevel, ConceptType, Constraint, ProblemRole, Representation
 from domain.models.overall_models.curriculum import Concept, Subject, Topic
 
@@ -71,7 +71,7 @@ def _selection_request() -> ExerciseSelectionRequest:
 
 
 class _LessonManagerStub:
-    async def get_exercise(self, exercise_id: str, user_id: str) -> Exercise:
+    async def get_public_exercise(self, exercise_id: str) -> Exercise:
         return _exercise()
 
 
@@ -125,6 +125,16 @@ class Lesson2Phase4Tests(unittest.IsolatedAsyncioTestCase):
                 user_id="user-1",
                 correlation_id="corr-1",
             )
+
+    async def test_submission_data_accepts_spec_alias(self):
+        submission = SubmissionData.model_validate(
+            {
+                "status": False,
+                "is_progress_farming": [True, 3],
+            }
+        )
+
+        self.assertEqual(submission.is_progress_farm, (True, 3))
 
     async def test_classify_output_rejects_out_of_range_scores(self):
         with self.assertRaises(ValidationError):
