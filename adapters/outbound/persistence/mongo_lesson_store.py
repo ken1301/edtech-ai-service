@@ -168,17 +168,55 @@ class MongoLessonAdapter(LessonStorePort):
             raise LessonStoreError("An unexpected error occurred while deserializing a lesson artifact.") from e
 
     async def get_exercise(self, exercise_id: str, user_id: str) -> Exercise:
-        doc = await self.get_lesson_artifact(exercise_id=exercise_id, user_id=user_id)
         try:
+            await self._ensure_indexes()
+            doc = await self._col.find_one({"exercise_id": exercise_id})
+            if not doc and ObjectId.is_valid(exercise_id):
+                doc = await self._col.find_one({"_id": ObjectId(exercise_id)})
+        except PyMongoError as e:
+            logger.error(
+                "mongo_lesson_store.get_exercise.failed",
+                log_type="technical",
+                exercise_id=exercise_id,
+                user_id=user_id,
+                error=str(e),
+            )
+            raise LessonStoreError(f"Failed to fetch exercise '{exercise_id}' from MongoDB.") from e
+        except Exception as e:
+            logger.error(
+                "mongo_lesson_store.get_exercise.unexpected_error",
+                log_type="technical",
+                exercise_id=exercise_id,
+                user_id=user_id,
+                error=str(e),
+            )
+            raise LessonStoreError("An unexpected error occurred while fetching an exercise.") from e
+
+        if not doc:
+            logger.error(
+                "mongo_lesson_store.get_exercise.not_found",
+                log_type="technical",
+                exercise_id=exercise_id,
+                user_id=user_id,
+            )
+            raise LessonStoreError(f"Exercise '{exercise_id}' was not found in MongoDB.")
+
+        try:
+            doc = dict(doc)
+            if doc.get("lesson1") == {}:
+                doc["lesson1"] = None
+            if doc.get("lesson2") == {}:
+                doc["lesson2"] = None
+            artifact = LessonArtifact(**doc)
+            if artifact.lesson2 is None:
+                raise LessonStoreError(f"Exercise '{exercise_id}' does not contain lesson 2 data.")
             logger.debug(
                 "mongo_lesson_store.get_exercise.completed",
                 log_type="debug",
                 exercise_id=exercise_id,
                 user_id=user_id,
             )
-            if doc.lesson2 is None:
-                raise LessonStoreError(f"Exercise '{exercise_id}' does not contain lesson 2 data.")
-            return doc.lesson2.exercise
+            return artifact.lesson2.exercise
         except (KeyError, TypeError, ValueError) as e:
             logger.error(
                 "mongo_lesson_store.get_exercise.deserialize_failed",
