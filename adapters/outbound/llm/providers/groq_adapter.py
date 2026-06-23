@@ -3,6 +3,7 @@ from groq import AsyncGroq
 import instructor
 from instructor.exceptions import IncompleteOutputException, InstructorError, InstructorRetryException
 from pydantic import BaseModel
+from math import ceil
 from typing import List, Optional
 import time
 
@@ -54,6 +55,20 @@ class GroqAdapter(LLMPort):
         output_cost = (usage.completion_tokens / 1_000_000) * output_cost_per_million
         return input_cost, output_cost
 
+    @staticmethod
+    def _prompt_diagnostics(formatted_messages: List[dict], max_tokens: Optional[int]) -> dict:
+        system_prompt_chars = len(str(formatted_messages[0].get("content", ""))) if formatted_messages else 0
+        user_message_chars = sum(len(str(message.get("content", ""))) for message in formatted_messages[1:])
+        total_chars = system_prompt_chars + user_message_chars
+        return {
+            "message_count": len(formatted_messages),
+            "system_prompt_chars": system_prompt_chars,
+            "message_chars": user_message_chars,
+            "total_input_chars": total_chars,
+            "estimated_input_tokens": ceil(total_chars / 4) if total_chars else 0,
+            "max_completion_tokens": max_tokens,
+        }
+
     async def generate_response(
         self,
         system_prompt: str,
@@ -74,6 +89,17 @@ class GroqAdapter(LLMPort):
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+
+        diagnostics = self._prompt_diagnostics(formatted_messages, max_tokens)
+        logger.debug(
+            "groq_adapter.generate_response.started",
+            log_type="technical",
+            model=self.model,
+            structured_output=response_model is not None,
+            response_model=response_model.__name__ if response_model is not None else None,
+            temperature=temperature,
+            **diagnostics,
+        )
 
         if response_model is not None:
             return await self._generate_structured(api_params, response_model)
