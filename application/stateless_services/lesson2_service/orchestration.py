@@ -45,9 +45,9 @@ class Lesson2Orchestration:
     async def process(
         self,
         request: Lesson2Request,
-        history_msg: List[Message],
         session_metadata: SessionMetadata,
-    ) -> Tuple[str, SessionMetadata, List]:
+        history_msg: Optional[List[Message]] = None,
+    ) -> Tuple[str, SessionMetadata, List, Optional[bool]]:
         try:
             logger.debug(
                 "lesson2.orchestration.process.called",
@@ -58,6 +58,7 @@ class Lesson2Orchestration:
             # print(f"Request: {request}")
 
             all_token_usage: List = []
+            is_correct: Optional[bool] = None
 
             if request.is_submission:
                 classify_output = None
@@ -81,7 +82,7 @@ class Lesson2Orchestration:
                     session_metadata=session_metadata,
                     history_msg=history_msg,
                 )
-                return content, session_metadata, all_token_usage + usage
+                return content, session_metadata, all_token_usage + usage, is_correct
 
             if classify_output and classify_output.routing == Routing.FAST_PATH_REPLY:
                 content, session_metadata, usage = await self._fast_path_reply.process(
@@ -90,7 +91,7 @@ class Lesson2Orchestration:
                     session_metadata=session_metadata,
                     history_msg=history_msg,
                 )
-                return content, session_metadata, all_token_usage + usage
+                return content, session_metadata, all_token_usage + usage, is_correct
 
             content, session_metadata, usage = await self._full_pipeline.process(
                 request=request,
@@ -99,6 +100,8 @@ class Lesson2Orchestration:
                 session_metadata=session_metadata,
                 history_msg=history_msg,
             )
+            if request.is_submission and ground_output:
+                is_correct = ground_output.result_verdict
 
             if self._should_add_wrap_up(request, session_metadata):
                 wrap_up_content, wrap_up_usage = await self._full_pipeline.process_wrap_up(
@@ -109,7 +112,7 @@ class Lesson2Orchestration:
                 if wrap_up_usage is not None:
                     usage.append(wrap_up_usage)
 
-            return content, session_metadata, all_token_usage + usage
+            return content, session_metadata, all_token_usage + usage, is_correct
 
         except Lesson2PipelineError as e:
             raise Lesson2PipelineError("Failed to process message through pipeline.") from e
@@ -143,7 +146,6 @@ class Lesson2Orchestration:
             approach_list=problem.approach_list,
             student_reasoning=_current_reasoning(session_metadata),
             student_submitted_answer=request.user_msg.strip() if request.user_msg else "",
-            result_status=request.submission_data.status,
         )
         layer_response = await self._ground_layer.execute(ground_input)
         return layer_response.output, layer_response.usage

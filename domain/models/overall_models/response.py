@@ -1,4 +1,4 @@
-from typing import Any, List, Union
+from typing import Any, List, Union, Optional
 
 from pydantic import BaseModel
 
@@ -21,6 +21,7 @@ class Lesson2ChatResponse(BaseModel):
     content: str
     usage: List[Any]
     current_progress: float
+    is_correct: Optional[bool] = None
 
 class SyncAndCloseResponse(BaseModel):
     status: str

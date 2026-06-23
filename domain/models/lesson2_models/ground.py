@@ -21,9 +21,9 @@ class GroundInput(BaseModel):
     approach_list: List[Approach] = Field(min_length=1, max_length=12)
     student_reasoning: str = Field(default="", max_length=4000)
     student_submitted_answer: str = Field(default="", max_length=4000)
-    result_status: bool
 
 class GroundOutput(BaseModel):
+    result_verdict: bool = Field(description="True if the student reached the correct final result or logical conclusion, false otherwise")
     approach_verdict: ApproachVerdict
 
     matched_approach_id: Optional[int] = Field(default=None, ge=0)

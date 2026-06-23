@@ -111,7 +111,7 @@ class ChatbotUseCase:
                 )
                 history_msg.append(user_msg_obj)
 
-                response_content, updated_metadata, token_usage = await self._orchestration.process(
+                response_content, updated_metadata, token_usage, is_correct = await self._orchestration.process(
                     request=request,
                     history_msg=history_msg,
                     session_metadata=metadata,
@@ -139,6 +139,7 @@ class ChatbotUseCase:
                     usage=token_usage,
                     correlation_id=correlation_id,
                     current_progress=updated_metadata.current_progress,
+                    is_correct=is_correct,
                 )
             
         except (

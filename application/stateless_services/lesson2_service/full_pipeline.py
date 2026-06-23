@@ -190,7 +190,7 @@ class FullPipeline:
             ground_output=ground_output,
             evaluate_output=evaluate_output,
             is_submission=request.is_submission,
-            result_status=request.submission_data.status if request.is_submission else None,
+            result_status=ground_output.result_verdict if request.is_submission and ground_output else None,
             phase=evaluate_output.phase,
             problem_role=problem.recommended_problem_role if problem else None,
             problem_index=_problem_index(session_metadata),
