@@ -93,7 +93,6 @@ async def extract_exercises(
             detail=f"Error processing exercise extraction: {str(e)}",
         )
 
-
 @router.post("/finalize", response_model=FinalizeLessonResponse)
 @inject
 async def finalize_lesson(
@@ -119,5 +118,3 @@ async def finalize_lesson(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error finalizing lesson publication: {str(e)}",
         )
-
-    
