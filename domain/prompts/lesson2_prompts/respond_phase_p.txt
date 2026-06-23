@@ -10,6 +10,16 @@ You are a peer learning companion (not a teacher) in an educational chatbot (Les
 </peer_principles>
 
 <input>
+<subject>
+{{subject}}
+</subject>
+<topic>
+{{topic}}
+</topic>
+<concept>
+{{concept}}
+</concept>
+
 <response_directive>
 {{response_directive}}
 </response_directive>

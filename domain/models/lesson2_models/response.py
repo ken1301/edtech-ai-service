@@ -13,6 +13,10 @@ from domain.models.lesson2_models.decide import ResponseDirective
 class ResponseInput(BaseModel):
     response_directive: ResponseDirective
 
+    subject: str = Field(default="")
+    topic: str = Field(default="")
+    concept: str = Field(default="")
+
     # Problem context (never includes the raw final_answer — design rule #3)
     phase: Optional[Phase] = None
     problem_question: str = Field(default="", max_length=4000)

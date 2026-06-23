@@ -217,6 +217,9 @@ class FullPipeline:
         _, attempts_made, max_attempts = _attempt_context(problem, state, ground_output)
         return ResponseInput(
             response_directive=decide_output.directive,
+            subject=request.subject.value,
+            topic=request.topic.value,
+            concept=request.concept.value,
             phase=evaluate_output.phase,
             problem_question=problem.question if problem else "",
             problem_role=problem.recommended_problem_role if problem else None,
