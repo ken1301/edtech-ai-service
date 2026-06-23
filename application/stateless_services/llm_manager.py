@@ -35,7 +35,7 @@ class LLMManager:
         self,
         llm_port: LLMPort,
         fallback_ports: Optional[Sequence[LLMPort]] = None,
-        timeout_seconds: float = 30.0,
+        timeout_seconds: float = 60.0,
         max_retries: int = 1,
         retry_backoff_seconds: float = 0.1,
     ):

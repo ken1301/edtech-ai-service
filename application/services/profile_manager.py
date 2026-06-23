@@ -16,6 +16,14 @@ class ProfileManager:
     ):
         self._profile_store = profile_store
 
+    @staticmethod
+    def _default_student_profile(user_id: str) -> StudentProfile:
+        return StudentProfile(
+            user_id=user_id,
+            full_name=None,
+            grade=None,
+        )
+
     async def get_student_profile(self, user_id: str) -> StudentProfile | None:
         """Fetch the student profile from the profile store (MongoDB) using the user ID."""
         try: 
@@ -27,7 +35,7 @@ class ProfileManager:
                     log_type="business",
                     user_id=user_id,
                 )
-                return None
+                return self._default_student_profile(user_id)
 
             logger.info(
                 "profile_manager.get_student_profile.completed",

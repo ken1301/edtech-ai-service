@@ -3,6 +3,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
+from typing import List, Optional
+
 from application.services.cloud_manager import CloudManager
 from application.services.lesson_manager import LessonManager
 
@@ -13,8 +15,20 @@ from application.stateless_services.docs_transform import PDFToMarkdownTransform
 from domain.models.lesson2_models.exercise import Exercise, Lesson2Exercises
 from domain.models.overall_models.document import ImageDocument, MarkdownDocument, PDFDocument
 from domain.models.overall_models.curriculum import Subject, Topic, Concept
-from domain.models.overall_models.response import Lesson2ExerciseExtractionResponse, Lesson1CreationResponse
-from domain.models.overall_models.lesson1 import Lesson1CreationOutput, CreateLessonMetadata
+from domain.models.overall_models.response import (
+    FinalizeLessonResponse,
+    Lesson2ExerciseExtractionOutput,
+    Lesson2ExerciseExtractionResponse,
+    Lesson1CreationResponse,
+)
+from domain.models.overall_models.lesson1 import (
+    CreateLessonMetadata,
+    Lesson1CreationOutput,
+    Lesson1StoredArtifact,
+    Lesson1StoredSection,
+    Lesson2StoredArtifact,
+    Lesson2StoredSection,
+)
 
 from domain.exceptions import (
     LLMManagerError,
@@ -46,6 +60,70 @@ class CreateLessonUseCase:
         self._lesson_manager = lesson_manager 
         self._prompt_builder = prompt_builder
         self._pdf_to_markdown_transformer = pdf_to_markdown_transformer
+
+    @staticmethod
+    def _lesson1_exercise_id(lesson_id: str) -> str:
+        return f"{lesson_id}:lesson1"
+
+    @staticmethod
+    def _summarize_lesson2_exercise(exercise: Exercise) -> str:
+        total_problems = len(exercise.problem_list)
+        leading_roles = ", ".join(
+            problem.recommended_problem_role.value for problem in exercise.problem_list[:4]
+        )
+        if not leading_roles:
+            leading_roles = "none"
+        return (
+            f"Generated {total_problems} lesson 2 problems for {exercise.concept.value} "
+            f"with leading roles: {leading_roles}."
+        )
+
+    async def finalize_run(self, user_id: str, lesson_id: str) -> FinalizeLessonResponse:
+        try:
+            lesson_creation_metadata = await self._lesson_manager.get_lesson_creation_metadata(
+                lesson_id=lesson_id,
+                user_id=user_id,
+            )
+            if lesson_creation_metadata is None:
+                raise CreateLessonUseCaseError("Lesson creation metadata was not found.")
+            if not lesson_creation_metadata.lesson2_exercise_id:
+                raise CreateLessonUseCaseError("Lesson 2 must be completed before publishing this lesson.")
+
+            await self._lesson_manager.attach_root_lesson_id(
+                exercise_id=lesson_creation_metadata.lesson1_exercise_id,
+                user_id=user_id,
+                root_lesson_id=lesson_id,
+            )
+            await self._lesson_manager.attach_root_lesson_id(
+                exercise_id=lesson_creation_metadata.lesson2_exercise_id,
+                user_id=user_id,
+                root_lesson_id=lesson_id,
+            )
+            await self._lesson_manager.delete_lesson_creation_metadata(
+                lesson_id=lesson_id,
+                user_id=user_id,
+            )
+
+            return FinalizeLessonResponse(
+                status="published",
+                lesson_id=lesson_id,
+                lesson1_exercise_id=lesson_creation_metadata.lesson1_exercise_id,
+                lesson2_exercise_id=lesson_creation_metadata.lesson2_exercise_id,
+            )
+        except CreateLessonUseCaseError:
+            raise
+        except LessonManagerError as e:
+            raise CreateLessonUseCaseError("Failed to finalize lesson publication state.") from e
+        except Exception as e:
+            logger.error(
+                "create_lesson.finalize.unexpected.failed",
+                log_type="technical",
+                lesson_id=lesson_id,
+                user_id=user_id,
+                error=str(e),
+                exc_info=True,
+            )
+            raise CreateLessonUseCaseError("Unexpected error during lesson finalization process.") from e
 
     async def _load_document_content(
         self,
@@ -84,7 +162,6 @@ class CreateLessonUseCase:
     async def lesson2_run(
         self, 
         user_id: str,
-        correlation_id: str,
         lesson_id: str,
         document_url: str,
         subject: Subject,
@@ -107,6 +184,16 @@ class CreateLessonUseCase:
                 lesson_id=lesson_id,
                 user_id=user_id,
             )
+            if lesson_creation_metadata is None:
+                raise LessonManagerError("Lesson creation metadata was not found.")
+            lesson1_artifact = await self._lesson_manager.get_lesson_artifact(
+                exercise_id=lesson_creation_metadata.lesson1_exercise_id,
+                user_id=user_id,
+            )
+            if lesson1_artifact is None:
+                raise LessonManagerError("Lesson 1 artifact was not found.")
+            if lesson1_artifact.lesson1 is None:
+                raise LessonManagerError("Lesson 1 artifact is incomplete.")
             lesson1_summary = (
                 getattr(lesson_creation_metadata, "lesson1_summary", None)
                 or getattr(lesson_creation_metadata, "summary", None)
@@ -126,16 +213,39 @@ class CreateLessonUseCase:
             llm_response = await self._llm_manager.generate_response(
                 system_prompt=extract_exercise_prompt,
                 messages=[],
-                response_model=Exercise
+                response_model=Exercise,
             )
             formatted_exercises = llm_response.content
             formatted_exercises.user_id = user_id
             exercise_id = lesson_id
+            lesson2_summary = formatted_exercises.summary if formatted_exercises.summary else self._summarize_lesson2_exercise(formatted_exercises)
+            lesson2_output = Lesson2ExerciseExtractionOutput(
+                exercise=formatted_exercises,
+                summary=lesson2_summary,
+            )
 
             await self._lesson_manager.save_exercise(
                 exercise_id=exercise_id,
                 user_id=user_id,
-                exercise=formatted_exercises,
+                exercise=Lesson2StoredArtifact(
+                    user_id=user_id,
+                    lesson1=lesson1_artifact.lesson1,
+                    lesson2=Lesson2StoredSection(
+                        exercise=formatted_exercises,
+                        summary=lesson2_summary,
+                    ),
+                    subject=lesson_creation_metadata.subject,
+                    topic=lesson_creation_metadata.topic,
+                    concept=lesson_creation_metadata.concept,
+                ),
+            ) 
+
+            lesson_creation_metadata.lesson2_exercise_id = exercise_id
+            lesson_creation_metadata.lesson2_summary = lesson2_summary
+            await self._lesson_manager.save_lesson_creation_metadata(
+                lesson_id=lesson_id,
+                user_id=user_id,
+                metadata=lesson_creation_metadata,
             )
 
             logger.info(
@@ -147,9 +257,8 @@ class CreateLessonUseCase:
 
             return Lesson2ExerciseExtractionResponse(
                 exercise_id=exercise_id,
-                output=formatted_exercises,
+                output=lesson2_output,
                 usage=llm_response.usage,
-                correlation_id=correlation_id
             )
         
         except CloudManagerError as e:
@@ -243,9 +352,9 @@ class CreateLessonUseCase:
     async def lesson1_run(
         self,
         user_id: str,
-        correlation_id: str,
         lesson_id: str,
         document_url: str,
+        previous_lessons: List[Concept],
         subject: Subject,
         topic: Topic,
         concept: Concept
@@ -261,7 +370,6 @@ class CreateLessonUseCase:
                     no_images_log_event="create_lesson1.no_images_found",
                 )
 
-            previous_lessons = []
             lesson1_creation_input = {
                 "content": content,
                 "content_output_language": "Vietnamese",
@@ -278,10 +386,32 @@ class CreateLessonUseCase:
             )
 
             lesson1_creation_output = llm_response.content
+            exercise_id = self._lesson1_exercise_id(lesson_id)
+
+            await self._lesson_manager.save_exercise(
+                exercise_id=exercise_id,
+                user_id=user_id,
+                exercise=Lesson1StoredArtifact(
+                    user_id=user_id,
+                    lesson1=Lesson1StoredSection(
+                        learning_content=lesson1_creation_output.knowledge,
+                        exercise=lesson1_creation_output.exercises,
+                        summary=lesson1_creation_output.summary,
+                    ),
+                    subject=subject,
+                    topic=topic,
+                    concept=concept,
+                ),
+            )
 
             lesson_creation_metadata = CreateLessonMetadata(
+                user_id=user_id,
                 lesson_id=lesson_id,
-                lesson1_summary=lesson1_creation_output.summary
+                lesson1_exercise_id=exercise_id,
+                lesson1_summary=lesson1_creation_output.summary,
+                subject=subject,
+                topic=topic,
+                concept=concept,
             )
             await self._lesson_manager.save_lesson_creation_metadata(
                 lesson_id=lesson_id,
@@ -297,9 +427,9 @@ class CreateLessonUseCase:
             )
 
             return Lesson1CreationResponse(
+                exercise_id=exercise_id,
                 output=lesson1_creation_output,
                 usage=usage,
-                correlation_id=correlation_id
             )
 
         except CloudManagerError as e:

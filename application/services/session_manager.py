@@ -67,7 +67,6 @@ class SessionManager:
             return metadata, Lesson2ChatResponse(
                 content=metadata.last_response_content,
                 usage=list(metadata.last_response_usage),
-                correlation_id=correlation_id,
                 current_progress=metadata.last_response_progress,
             )
 
