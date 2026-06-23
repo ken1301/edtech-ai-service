@@ -67,8 +67,14 @@ class S3Adapter(CloudPort):
 
         parsed = urlparse(document_url)
         key = parsed.path.lstrip("/") or document_url.lstrip("/")
+        
         if key.startswith(f"{self._bucket_name}/"):
             key = key[len(self._bucket_name) + 1 :]
+        else:
+            parts = key.split("/")
+            if len(parts) > 1 and parts[1] == self._USER_PREFIX:
+                key = "/".join(parts[1:])
+
         if key.startswith("uploads/"):
             key = key[len("uploads/") :]
         return key
