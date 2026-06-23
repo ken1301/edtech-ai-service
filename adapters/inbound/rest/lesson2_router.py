@@ -1,4 +1,7 @@
 from typing import List
+import uuid
+
+import structlog
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from dependency_injector.wiring import inject, Provide
@@ -37,6 +40,13 @@ from domain.exceptions import (
 )
 
 router = APIRouter()
+
+
+def _current_correlation_id() -> str:
+    correlation_id = structlog.contextvars.get_contextvars().get("correlation_id")
+    if isinstance(correlation_id, str) and correlation_id:
+        return correlation_id
+    return str(uuid.uuid4())
 
 @router.post("/chat", response_model=Lesson2ChatResponse)
 @inject
@@ -115,6 +125,7 @@ async def sync_and_close(
     learning_service: LearningService = Depends(Provide[Container.learning_service]),
 ) -> SyncAndCloseResponse:
     try:
+        correlation_id = _current_correlation_id()
         user_id = enforce_authenticated_user_id(authenticated_user.user_id, request.user_id)
         metadata, newly_marked = await learning_service._session_manager.redis_mark_session_closing(
             session_id=request.session_id,
@@ -128,7 +139,6 @@ async def sync_and_close(
             return SyncAndCloseResponse(
                 status="closed",
                 detail="Session is already closed.",
-                correlation_id=request.correlation_id,
             )
 
         already_marked = not newly_marked
@@ -138,7 +148,7 @@ async def sync_and_close(
                 learning_service.sync_and_close_session,
                 user_id=user_id,
                 session_id=request.session_id,
-                correlation_id=request.correlation_id,
+                correlation_id=correlation_id,
                 subject=request.subject,
                 topic=request.topic,
                 concept=request.concept,
@@ -147,7 +157,6 @@ async def sync_and_close(
         return SyncAndCloseResponse(
             status="closing" if already_marked else "accepted",
             detail="Session is already closing." if already_marked else "Session sync and close has been scheduled.",
-            correlation_id=request.correlation_id,
         )
 
     except AuthorizationError:
@@ -184,6 +193,7 @@ async def sync_and_close(
         )
 
 @router.post("/select-exercises", response_model=List[Problem])
+@inject
 async def select_exercises(
     request: ExerciseSelectionRequest,
     authenticated_user: AuthenticatedUser = Depends(get_authenticated_user),
@@ -192,13 +202,14 @@ async def select_exercises(
     adaptive_learning_service: AdaptiveLearningService = Depends(Provide[Container.adaptive_learning_service]),
 ) -> List[Problem]:
     try:
+        print("Received exercise selection request:", request)
+
         user_id = enforce_authenticated_user_id(authenticated_user.user_id, request.user_id)
         student_profile = await profile_manager.get_student_profile(
             user_id=user_id,
         )
-        exercises = await lesson_manager.get_exercise(
+        exercises = await lesson_manager.get_public_exercise(
             exercise_id=request.exercise_id,
-            user_id=user_id,
         )
 
         selected_exercises = await adaptive_learning_service.problem_select(
@@ -206,6 +217,7 @@ async def select_exercises(
             exercise=exercises,
         ) # -> Lesson2Exercises
 
+        print("Selected exercises:", selected_exercises.ordered_problem_list())
         return selected_exercises.ordered_problem_list()
         
     except ProfileManagerError as e:
@@ -215,9 +227,15 @@ async def select_exercises(
         )
 
     except LessonManagerError as e:
+        detail = str(e)
+        if "not found" in detail.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=detail,
+            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error fetching exercises: {str(e)}",
+            detail=f"Error fetching exercises: {detail}",
         )
 
     except ProblemSelectionAnalysisError as e:

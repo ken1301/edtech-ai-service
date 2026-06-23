@@ -100,6 +100,18 @@ def _get_settings(request: Request):
     return container.config()
 
 
+def _get_internal_authenticated_user(request: Request) -> Optional[AuthenticatedUser]:
+    user_id = request.headers.get("X-Authenticated-User-ID")
+    if not user_id:
+        return None
+
+    return AuthenticatedUser(
+        user_id=user_id,
+        username=request.headers.get("X-Authenticated-Username") or None,
+        role=request.headers.get("X-Authenticated-Role") or None,
+    )
+
+
 async def get_authenticated_user(request: Request) -> AuthenticatedUser:
     settings = _get_settings(request)
     expected_api_key = settings.AI_SERVICE_API_KEY
@@ -110,6 +122,12 @@ async def get_authenticated_user(request: Request) -> AuthenticatedUser:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid AI service API key.",
         )
+
+    internal_user = _get_internal_authenticated_user(request)
+    if internal_user is not None:
+        request.state.auth_user_id = internal_user.user_id
+        structlog.contextvars.bind_contextvars(user_id=internal_user.user_id)
+        return internal_user
 
     token = _extract_bearer_token(request)
     payload = _verify_hs256_jwt(token, settings.JWT_SECRET)

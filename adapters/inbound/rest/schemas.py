@@ -10,11 +10,10 @@ ChatRequest = Lesson2Request
 
 class DocumentExtractionRequest(BaseModel):
     user_id: NonEmptyId
-    correlation_id: NonEmptyId
     lesson_id: NonEmptyId
 
     document_url: Optional[str] = None
-    previous_lesson: List[Concept] = Field(default_factory=list)
+    previous_lessons: List[Concept] = Field(default_factory=list)
     
     subject: Subject
     topic: Topic
@@ -22,7 +21,6 @@ class DocumentExtractionRequest(BaseModel):
     
 class ExerciseExtractionRequest(BaseModel):
     user_id: NonEmptyId
-    correlation_id: NonEmptyId
     lesson_id: NonEmptyId
 
     document_url: Optional[str] = None
@@ -31,19 +29,18 @@ class ExerciseExtractionRequest(BaseModel):
     topic: Topic
     concept: Concept
 
+
+class FinalizeLessonRequest(BaseModel):
+    user_id: NonEmptyId
+    lesson_id: NonEmptyId
+
 class ExerciseSelectionRequest(BaseModel):
     exercise_id: NonEmptyId
     user_id: NonEmptyId
-    correlation_id: NonEmptyId
-
-class ExerciseSelectionResponse(BaseModel):
-    selected_problems: List[Problem]
-    correlation_id: str
 
 class SyncAndCloseRequest(BaseModel):
     user_id: NonEmptyId
     session_id: NonEmptyId
-    correlation_id: NonEmptyId
     subject: Subject
     topic: Topic
     concept: Concept
