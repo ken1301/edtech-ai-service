@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     SESSION_EXPIRATION_SWEEP_SECONDS: int = 30
 
     # LLM resilience
-    LLM_REQUEST_TIMEOUT_SECONDS: float = 30.0
+    LLM_REQUEST_TIMEOUT_SECONDS: float = 120.0
     LLM_MAX_RETRIES: int = 1
     LLM_RETRY_BACKOFF_SECONDS: float = 0.1
 
