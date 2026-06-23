@@ -78,7 +78,7 @@ class S3Adapter(CloudPort):
             key = key[len("uploads/") :]
         expected_prefix = f"{self._USER_PREFIX}/{quote(user_id, safe='')}/"
         if not key.startswith(expected_prefix):
-            raise CloudAdapterError("Document key does not belong to the authenticated user.")
+            raise CloudAdapterError(f"Document key does not belong to the authenticated user. Key: '{key}', Expected Prefix: '{expected_prefix}', Bucket Name: '{self._bucket_name}'")
 
     @staticmethod
     def _split_key(key: str) -> tuple[str, str]:
