@@ -63,8 +63,9 @@ class EvaluateInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_semantics(self) -> "EvaluateInput":
-        if self.attempts_made > self.max_attempts:
-            raise ValueError("attempts_made must be less than or equal to max_attempts")
+        # Allow attempts_made > max_attempts so the pipeline can gracefully handle exceeded limits.
+        # if self.attempts_made > self.max_attempts:
+        #     raise ValueError("attempts_made must be less than or equal to max_attempts")
 
         if self.current_approach_id is not None:
             if not self.available_approaches:

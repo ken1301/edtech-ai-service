@@ -33,8 +33,9 @@ class DecideInput(BaseModel):
         if self.problem_index >= self.total_problems:
             raise ValueError("problem_index must be less than total_problems")
 
-        if self.attempts_made > self.max_attempts:
-            raise ValueError("attempts_made must be less than or equal to max_attempts")
+        # Allow attempts_made > max_attempts so the pipeline can gracefully handle exceeded limits.
+        # if self.attempts_made > self.max_attempts:
+        #     raise ValueError("attempts_made must be less than or equal to max_attempts")
 
         if self.is_submission and self.result_status is None:
             raise ValueError("result_status is required when is_submission=True")
