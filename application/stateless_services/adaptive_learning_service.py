@@ -116,9 +116,9 @@ class AdaptiveLearningService:
         return best_overlap
 
     @classmethod
-    def _score_problem(cls, problem: Problem, student_profile: StudentProfile, role: ProblemRole) -> float:
-        preference = student_profile.preferences
-        difficulty_shift = cls._DIFFICULTY_SHIFT.get(preference.preferred_difficulty, 0.0)
+    def _score_problem(cls, problem: Problem, student_profile: Optional[StudentProfile], role: ProblemRole) -> float:
+        preference = student_profile.preferences if student_profile else StudentPreference()
+        difficulty_shift = cls._DIFFICULTY_SHIFT.get(preference.preferred_difficulty, 0.0) if preference.preferred_difficulty else 0.0
         target_bloom = max(0.0, min(1.0, cls._ROLE_TARGET_BLOOM[role] + difficulty_shift))
         average_bloom = cls._average_bloom_score(problem)
 
