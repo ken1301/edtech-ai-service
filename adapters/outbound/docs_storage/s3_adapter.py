@@ -39,8 +39,15 @@ class S3Adapter(CloudPort):
     def _ensure_bucket_exists(self) -> None:
         try:
             self.s3_client.head_bucket(Bucket=self._bucket_name)
-        except ClientError:
-            self.s3_client.create_bucket(Bucket=self._bucket_name)
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code")
+            if error_code == "404" or error_code == "NoSuchBucket":
+                try:
+                    self.s3_client.create_bucket(Bucket=self._bucket_name)
+                except ClientError:
+                    pass  # Ignore creation errors, might be permission issues
+            else:
+                pass  # Ignore other errors like 403 Forbidden from restrictive tokens
 
     def _document_key(self, user_id: str, document_type: str, document_id: str, filename: str) -> str:
         return f"{self._USER_PREFIX}/{quote(user_id, safe='')}/{document_type}/{document_id}/{quote(filename, safe='')}"
