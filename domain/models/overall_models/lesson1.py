@@ -1,9 +1,12 @@
 from enum import Enum
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+from typing import List, Optional
 
+from pydantic import BaseModel, ConfigDict, Field
+
+from domain.models.lesson2_models.exercise import Exercise as Lesson2Exercise
 from domain.models.overall_models.token_usage import TokenUsage
 from domain.models.overall_models.common import ConceptType, BloomLevel
+from domain.models.overall_models.curriculum import Subject, Topic, Concept
 from domain.models.lesson2_models.evaluate import Phase
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
@@ -42,7 +45,7 @@ class Lesson1Knowledge(BaseModel):
 
 # ── Exercises ─────────────────────────────────────────────────────────────────
 
-class Exercise(BaseModel):
+class Lesson1Exercise(BaseModel):
     """
     Unified exercise model — replaces the old split MultipleChoice / FillInTheBlank / TrueFalse.
 
@@ -63,6 +66,9 @@ class Exercise(BaseModel):
     targets_problem_1: bool  # True → direct evidence the student can attempt L2 Problem 1
 
 
+Exercise = Lesson1Exercise
+
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 
 class Lesson1Summary(BaseModel):
@@ -75,16 +81,53 @@ class Lesson1Summary(BaseModel):
 
 class Lesson1CreationOutput(BaseModel):
     user_id: str
-    knowledge: Lesson1Knowledge  # was: content: List[KnowledgeItem]
-    exercises: List[Exercise]    # was: Lesson1Exercises (split by type)
-    summary: Lesson1Summary      # was: summary: str
+    knowledge: Lesson1Knowledge  
+    exercises: List[Lesson1Exercise]   
+    summary: Lesson1Summary      
+
+
+class Lesson1StoredSection(BaseModel):
+    learning_content: Lesson1Knowledge
+    exercise: List[Lesson1Exercise]
+    summary: Lesson1Summary
+
+
+class Lesson2StoredSection(BaseModel):
+    exercise: Lesson2Exercise
+    summary: str
+
+
+class LessonArtifact(BaseModel):
+    root_lesson_id: Optional[str] = None
+    user_id: str
+    lesson1: Optional[Lesson1StoredSection] = None
+    lesson2: Optional[Lesson2StoredSection] = None
+    subject: Subject
+    topic: Topic
+    concept: Concept
+
+
+class Lesson1StoredArtifact(LessonArtifact):
+    lesson1: Lesson1StoredSection
+
+
+class Lesson2StoredArtifact(LessonArtifact):
+    lesson1: Lesson1StoredSection
+    lesson2: Lesson2StoredSection
     
 
 class CreateLessonMetadata(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
+    user_id: str
     lesson_id: str
+    lesson1_exercise_id: str
+    lesson2_exercise_id: Optional[str] = None
     lesson1_summary: Lesson1Summary = Field(alias="summary")
+    lesson2_summary: Optional[str] = None
+    subject: Subject
+    topic: Topic
+    concept: Concept
 
     @property
     def summary(self) -> Lesson1Summary:

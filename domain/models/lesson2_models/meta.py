@@ -10,7 +10,6 @@ from domain.models.lesson2_models.exercise import Problem, ROLE_ORDER
 
 
 NonEmptyId = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
-NonEmptyUserMessage = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
 
 class Lesson2Request(BaseModel):
     user_id: NonEmptyId
@@ -21,12 +20,22 @@ class Lesson2Request(BaseModel):
     topic: Topic
     concept: Concept
 
-    user_msg: NonEmptyUserMessage
-    is_submission: bool
+    user_msg: Optional[str] = None 
+
+    is_submission: bool = False
     submission_data: Optional[SubmissionData] = None
 
     @model_validator(mode="after")
     def validate_submission_data(self) -> "Lesson2Request":
+        normalized_user_msg = self.user_msg.strip() if isinstance(self.user_msg, str) else None
+
+        if self.is_submission:
+            self.user_msg = normalized_user_msg or ""
+        elif not normalized_user_msg:
+            raise ValueError("user_msg is required when is_submission=False")
+        else:
+            self.user_msg = normalized_user_msg
+
         if self.is_submission and self.submission_data is None:
             raise ValueError("submission_data is required when is_submission=True")
         return self

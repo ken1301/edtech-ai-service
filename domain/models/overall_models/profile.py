@@ -56,8 +56,8 @@ class StudentPreference(BaseModel):
 
 class StudentProfile(BaseModel):
     user_id: str = Field(..., alias="_id")
-    full_name: str
-    grade: int
+    full_name: Optional[str] = None
+    grade: Optional[str | int] = None
 
     preferences: StudentPreference = Field(default_factory=StudentPreference)
 

@@ -162,3 +162,8 @@ class ChatBotUseCaseError(Exception):
 class CreateLessonUseCaseError(Exception):
     """Raised when there is an error in the exercise selection use case."""
     pass
+
+
+class LegacyExerciseJobError(Exception):
+    """Raised when a legacy BullMQ exercise job cannot be processed."""
+    pass

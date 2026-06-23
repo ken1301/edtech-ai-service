@@ -66,6 +66,8 @@ class Exercise(BaseModel):
     topic: Topic
     concept: Concept
 
+    summary: Optional[str] = None  # optional summary of the exercise, to be shown to students after they complete the exercise
+
     user_id: Optional[str] = None
 
     @model_validator(mode="after")

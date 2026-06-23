@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Any, Tuple
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class Phase(str, Enum):
@@ -50,8 +50,13 @@ class ResponseClass(str, Enum):
 
 
 class SubmissionData(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     status: bool
-    is_progress_farm: Tuple[bool, int]
+    is_progress_farm: Tuple[bool, int] = Field(
+        validation_alias=AliasChoices("is_progress_farm", "is_progress_farming"),
+        serialization_alias="is_progress_farming",
+    )
 
 
 class Lesson2LayerUsage(BaseModel):
