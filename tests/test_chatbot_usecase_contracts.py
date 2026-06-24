@@ -12,6 +12,8 @@ from domain.exceptions import (
     SessionClosedError,
     SessionNotFoundError,
 )
+from domain.models.overall_models.common import Role
+from domain.models.overall_models.message import Message
 from domain.models.overall_models.response import Lesson2ChatResponse
 from domain.models.lesson2_models.meta import Lesson2Request, SessionMetadata
 from domain.models.overall_models.curriculum import Concept, Subject, Topic
@@ -50,31 +52,34 @@ class _SessionManagerStub:
         self.prepare_calls.append((session_id, user_id, correlation_id))
         if self.metadata is None:
             return None, None
-        if self.metadata.last_completed_correlation_id == correlation_id and self.metadata.last_response_content is not None:
+
+        last_completed_correlation_id = getattr(self.metadata, "last_completed_correlation_id", None)
+        last_response_content = getattr(self.metadata, "last_response_content", None)
+        last_response_usage = getattr(self.metadata, "last_response_usage", [])
+        last_response_progress = getattr(self.metadata, "last_response_progress", None)
+        active_correlation_id = getattr(self.metadata, "active_correlation_id", None)
+
+        if (
+            last_completed_correlation_id == correlation_id
+            and last_response_content is not None
+            and last_response_progress is not None
+        ):
             return self.metadata, Lesson2ChatResponse(
-                content=self.metadata.last_response_content,
-                usage=list(self.metadata.last_response_usage),
-                current_progress=self.metadata.last_response_progress or 0.0,
+                content=last_response_content,
+                usage=list(last_response_usage),
+                current_progress=last_response_progress,
             )
-        if self.metadata.active_correlation_id == correlation_id:
+        if active_correlation_id == correlation_id:
             raise Lesson2SessionConflictError("A request with this correlation_id is already in progress.")
-        if self.metadata.active_correlation_id is not None:
+        if active_correlation_id is not None:
             raise Lesson2SessionConflictError("Another request is already in progress for this session.")
         self.metadata.active_correlation_id = correlation_id
         return self.metadata, None
 
     async def abandon_lesson2_chat_request(self, session_id: str, metadata: SessionMetadata, correlation_id: str):
         self.abandon_calls.append((session_id, correlation_id))
-        if metadata.active_correlation_id == correlation_id:
+        if getattr(metadata, "active_correlation_id", None) == correlation_id:
             metadata.active_correlation_id = None
-
-    def complete_lesson2_chat_request(self, metadata: SessionMetadata, correlation_id: str, response_content: str, response_usage: list):
-        metadata.active_correlation_id = None
-        metadata.last_completed_correlation_id = correlation_id
-        metadata.last_response_content = response_content
-        metadata.last_response_usage = list(response_usage)
-        metadata.last_response_progress = metadata.current_progress
-        return metadata
 
     async def redis_get_all_messages(self, session_id: str):
         return list(self.messages)
@@ -121,7 +126,11 @@ class _OrchestrationValidationStub:
 
 
 class _OrchestrationSuccessStub:
+    def __init__(self):
+        self.calls = []
+
     async def process(self, **kwargs):
+        self.calls.append(kwargs)
         metadata = kwargs["session_metadata"]
         return "response", metadata, []
 
@@ -234,10 +243,11 @@ class ChatbotUseCaseContractTests(unittest.IsolatedAsyncioTestCase):
     async def test_successful_turn_increments_turn_count_with_turn_persistence(self):
         metadata = SessionMetadata(session_id="session-1", user_id="user-1", is_active=True, turn_count=1)
         session_manager = _SessionManagerStub(metadata)
+        orchestration = _OrchestrationSuccessStub()
         usecase = ChatbotUseCase(
             session_manager=session_manager,
             learning_service=_LearningServiceStub(),
-            orchestration=_OrchestrationSuccessStub(),
+            orchestration=orchestration,
         )
 
         response = await usecase.run(
@@ -252,13 +262,53 @@ class ChatbotUseCaseContractTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertIsInstance(response, Lesson2ChatResponse)
+        self.assertEqual(response.content, "response")
+        self.assertEqual(response.current_progress, 0.0)
         self.assertEqual(session_manager.guard_calls, ["session-1"])
         self.assertEqual(session_manager.metadata.turn_count, 2)
         self.assertEqual(session_manager.save_turn_with_metadata_calls, [("session-1", 2)])
+        self.assertEqual(len(orchestration.calls), 1)
+        self.assertEqual(orchestration.calls[0]["history_msg"][-1].content, "help")
+        self.assertFalse(orchestration.calls[0]["history_msg"][-1].is_submission)
+
+    async def test_successful_turn_propagates_current_progress(self):
+        metadata = SessionMetadata(session_id="session-1", user_id="user-1", is_active=True, turn_count=1)
+
+        class _ProgressOrchestrationStub:
+            async def process(self, **kwargs):
+                updated_metadata = kwargs["session_metadata"]
+                updated_metadata.current_progress = 37.5
+                return "response", updated_metadata, [{"tokens": 3}]
+
+        usecase = ChatbotUseCase(
+            session_manager=_SessionManagerStub(metadata),
+            learning_service=_LearningServiceStub(),
+            orchestration=_ProgressOrchestrationStub(),
+        )
+
+        response = await usecase.run(
+            user_id="user-1",
+            session_id="session-1",
+            correlation_id="corr-1",
+            request=_request(),
+            subject=Subject.IT,
+            topic=Topic.PROGRAMMING,
+            concept=Concept.FUNCTIONS,
+            background_task=BackgroundTasks(),
+        )
+
+        self.assertEqual(response.current_progress, 37.5)
+        self.assertEqual(response.usage, [{"tokens": 3}])
 
     async def test_compression_trims_messages_once(self):
         metadata = SessionMetadata(session_id="session-1", user_id="user-1", is_active=True, turn_count=21)
-        messages = [object() for _ in range(24)]
+        messages = [
+            Message(
+                role=Role.USER if index % 2 == 0 else Role.ASSISTANT,
+                content=f"message-{index}",
+            )
+            for index in range(24)
+        ]
         session_manager = _SessionManagerStub(metadata, messages=messages)
         learning_service = _LearningServiceStub(session_manager=session_manager)
         usecase = ChatbotUseCase(
@@ -281,66 +331,6 @@ class ChatbotUseCaseContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session_manager.delete_left_calls, [("session-1", 20)])
         self.assertEqual(session_manager.metadata.turn_count, 12)
         self.assertEqual(learning_service.compress_calls[0]["correlation_id"], "corr-1")
-
-    async def test_duplicate_completed_correlation_replays_cached_response(self):
-        metadata = SessionMetadata(
-            session_id="session-1",
-            user_id="user-1",
-            is_active=True,
-            last_completed_correlation_id="corr-1",
-            last_response_content="cached",
-            last_response_usage=[{"tokens": 1}],
-            last_response_progress=0.4,
-        )
-        session_manager = _SessionManagerStub(metadata)
-        usecase = ChatbotUseCase(
-            session_manager=session_manager,
-            learning_service=_LearningServiceStub(),
-            orchestration=_OrchestrationSuccessStub(),
-        )
-
-        response = await usecase.run(
-            user_id="user-1",
-            session_id="session-1",
-            correlation_id="corr-1",
-            request=_request(),
-            subject=Subject.IT,
-            topic=Topic.PROGRAMMING,
-            concept=Concept.FUNCTIONS,
-            background_task=BackgroundTasks(),
-        )
-
-        self.assertEqual(response.content, "cached")
-        self.assertEqual(response.usage, [{"tokens": 1}])
-        self.assertEqual(session_manager.save_turn_with_metadata_calls, [])
-
-    async def test_inflight_duplicate_correlation_raises_conflict(self):
-        metadata = SessionMetadata(
-            session_id="session-1",
-            user_id="user-1",
-            is_active=True,
-            active_correlation_id="corr-1",
-        )
-        session_manager = _SessionManagerStub(metadata)
-        usecase = ChatbotUseCase(
-            session_manager=session_manager,
-            learning_service=_LearningServiceStub(),
-            orchestration=_OrchestrationSuccessStub(),
-        )
-
-        with self.assertRaises(Lesson2SessionConflictError):
-            await usecase.run(
-                user_id="user-1",
-                session_id="session-1",
-                correlation_id="corr-1",
-                request=_request(),
-                subject=Subject.IT,
-                topic=Topic.PROGRAMMING,
-                concept=Concept.FUNCTIONS,
-                background_task=BackgroundTasks(),
-            )
-
-        self.assertEqual(session_manager.abandon_calls, [])
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ import unittest
 
 from pydantic import ValidationError
 
+from application.stateless_services.lesson2_service.full_pipeline import FullPipeline
 from application.stateless_services.lesson2_service.layers.decide_layer import DecideLayer
 from application.stateless_services.lesson2_service.layers.state_writer_layer import StateWriterLayer
 from application.stateless_services.lesson2_service.orchestration import Lesson2Orchestration
@@ -19,7 +20,7 @@ from domain.models.lesson2_models.decide import DecideInput
 from domain.models.lesson2_models.evaluate import AffectiveState, EvaluateOutput
 from domain.models.lesson2_models.exercise import Approach, ExercisePattern, Problem
 from domain.models.lesson2_models.ground import ApproachVerdict, GroundOutput
-from domain.models.lesson2_models.meta import Lesson2Request, SessionMetadata
+from domain.models.lesson2_models.meta import ApproachState, Lesson2Request, PerProblemState, SessionMetadata
 from domain.models.overall_models.common import (
     BloomLevel,
     ConceptType,
@@ -33,6 +34,61 @@ from domain.models.overall_models.curriculum import Concept, Subject, Topic
 class _GroundLayerStub:
     async def execute(self, input):
         raise AssertionError("ground layer should not be called in failing-path tests")
+
+
+class _FullPipelineWrapUpStub:
+    def __init__(self, *, content: str, updated_metadata: SessionMetadata, usage=None, wrap_up_content: str = "", wrap_up_usage=None):
+        self.content = content
+        self.updated_metadata = updated_metadata
+        self.usage = [] if usage is None else usage
+        self.wrap_up_content = wrap_up_content
+        self.wrap_up_usage = wrap_up_usage
+        self.process_calls = []
+        self.wrap_up_calls = []
+
+    async def process(self, **kwargs):
+        self.process_calls.append(kwargs)
+        return self.content, self.updated_metadata, list(self.usage)
+
+    async def process_wrap_up(self, **kwargs):
+        self.wrap_up_calls.append(kwargs)
+        return self.wrap_up_content, self.wrap_up_usage
+
+
+class _LayerResponse:
+    def __init__(self, output, usage=None):
+        self.output = output
+        self.usage = usage
+
+
+class _EvaluateLayerStub:
+    async def execute(self, input):
+        return _LayerResponse(_evaluate_output(), {"stage": "evaluate"})
+
+
+class _DecideLayerStub:
+    async def execute(self, input):
+        return _LayerResponse(_advance_decide_output(), {"stage": "decide"})
+
+
+class _ResponseLayerCaptureStub:
+    def __init__(self):
+        self.inputs = []
+
+    async def execute(self, input, phase=None):
+        self.inputs.append((input, phase))
+        return _LayerResponse(f"response for {input.problem_question}", {"stage": "response"})
+
+
+class _StateWriterAdvanceStub:
+    def __init__(self):
+        self.calls = []
+
+    async def execute(self, **kwargs):
+        self.calls.append(kwargs)
+        metadata = kwargs["session_metadata"]
+        metadata.current_problem_id = 102
+        return metadata
 
 
 def _request(*, is_submission: bool, submission_data: SubmissionData | None = None) -> Lesson2Request:
@@ -277,6 +333,410 @@ class Lesson2Phase1Tests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(updated.current_problem_id, 102)
         self.assertEqual(updated.phase_cycle_count, 1)
+
+    async def test_full_pipeline_uses_new_problem_context_after_advance(self):
+        response_layer = _ResponseLayerCaptureStub()
+        state_writer = _StateWriterAdvanceStub()
+        pipeline = FullPipeline(
+            evaluate_layer=_EvaluateLayerStub(),
+            decide_layer=_DecideLayerStub(),
+            response_layer=response_layer,
+            state_writer_layer=state_writer,
+        )
+        metadata = SessionMetadata(
+            session_id="session-1",
+            user_id="user-1",
+            problem_list=[
+                _problem(101, ProblemRole.REINFORCEMENT),
+                Problem(
+                    problem_id=102,
+                    question="What is 8 * 8?",
+                    approach_list=[
+                        Approach(
+                            summary="Multiply directly",
+                            bloom_level=BloomLevel.APPLY,
+                            concept_type_used=[ConceptType.METHOD],
+                            pattern=ExercisePattern(
+                                cognitive_operation=[],
+                                representation=[Representation.SYMBOLIC],
+                                constraints=[Constraint.NONE],
+                            ),
+                            approach_answer="64",
+                            strengths=[],
+                            weaknesses=[],
+                            max_attempts=3,
+                        )
+                    ],
+                    final_answer="64",
+                    open_approach=False,
+                    recommended_problem_role=ProblemRole.CHALLENGE,
+                    max_approach_trial=3,
+                ),
+            ],
+            current_problem_id=101,
+        )
+
+        content, updated_metadata, usage = await pipeline.process(
+            request=_request(is_submission=False),
+            classify_output=None,
+            ground_output=None,
+            session_metadata=metadata,
+            history_msg=[],
+        )
+
+        self.assertEqual(updated_metadata.current_problem_id, 102)
+        self.assertEqual(response_layer.inputs[0][0].problem_question, "What is 8 * 8?")
+        self.assertEqual(content, "response for What is 8 * 8?")
+        self.assertEqual(usage, [{"stage": "evaluate"}, {"stage": "decide"}, {"stage": "response"}])
+
+    async def test_orchestration_appends_wrap_up_after_final_problem_completion(self):
+        request = _request(
+            is_submission=True,
+            submission_data=SubmissionData(status=True, is_progress_farm=(False, 0)),
+        )
+        updated_metadata = SessionMetadata(
+            session_id="session-1",
+            user_id="user-1",
+            problem_list=[
+                _problem(101, ProblemRole.REINFORCEMENT),
+                _problem(102, ProblemRole.CHALLENGE),
+            ],
+            current_problem_id=102,
+            problem_state={
+                101: PerProblemState(solved=True),
+                102: PerProblemState(solved=True),
+            },
+            current_progress=100.0,
+        )
+        full_pipeline = _FullPipelineWrapUpStub(
+            content="Nice work, that answer is correct.",
+            updated_metadata=updated_metadata,
+            usage=[{"tokens": 4}],
+            wrap_up_content="You completed all 4 problems. Strong finish.",
+            wrap_up_usage={"tokens": 2},
+        )
+        orchestration = Lesson2Orchestration(
+            classify_layer=None,
+            ground_layer=_GroundLayerStub(),
+            full_pipeline=full_pipeline,
+            fast_path_reply=None,
+            safety_divert=None,
+        )
+
+        async def _ground_execute(input):
+            return type(
+                "GroundResponse",
+                (),
+                {
+                    "output": GroundOutput(
+                        approach_verdict=ApproachVerdict.CORRECT,
+                        matched_approach_id=0,
+                        matched_weakness=None,
+                        judge_confidence=0.95,
+                        explanation="correct",
+                    ),
+                    "usage": {"tokens": 1},
+                },
+            )()
+
+        orchestration._ground_layer.execute = _ground_execute
+
+        content, metadata, usage = await orchestration.process(
+            request=request,
+            history_msg=[],
+            session_metadata=SessionMetadata(
+                session_id="session-1",
+                user_id="user-1",
+                problem_list=[
+                    _problem(101, ProblemRole.REINFORCEMENT),
+                    _problem(102, ProblemRole.CHALLENGE),
+                ],
+                current_problem_id=102,
+            ),
+        )
+
+        self.assertEqual(
+            content,
+            "Nice work, that answer is correct.\n\nYou completed all 4 problems. Strong finish.",
+        )
+        self.assertIs(metadata, updated_metadata)
+        self.assertEqual(usage, [{"tokens": 1}, {"tokens": 4}, {"tokens": 2}])
+        self.assertEqual(len(full_pipeline.wrap_up_calls), 1)
+
+    async def test_build_evaluate_input_uses_active_approach_attempts_not_problem_total(self):
+        metadata = SessionMetadata(
+            session_id="session-1",
+            problem_list=[
+                Problem(
+                    problem_id=101,
+                    question="Solve the problem and report the requested numeric result.",
+                    approach_list=[
+                        Approach(
+                            summary="Method A",
+                            bloom_level=BloomLevel.APPLY,
+                            concept_type_used=[ConceptType.METHOD],
+                            pattern=ExercisePattern(
+                                cognitive_operation=[],
+                                representation=[Representation.SYMBOLIC],
+                                constraints=[Constraint.NONE],
+                            ),
+                            approach_answer="2",
+                            strengths=[],
+                            weaknesses=[],
+                            max_attempts=1,
+                        ),
+                        Approach(
+                            summary="Method B",
+                            bloom_level=BloomLevel.APPLY,
+                            concept_type_used=[ConceptType.METHOD],
+                            pattern=ExercisePattern(
+                                cognitive_operation=[],
+                                representation=[Representation.SYMBOLIC],
+                                constraints=[Constraint.NONE],
+                            ),
+                            approach_answer="4",
+                            strengths=[],
+                            weaknesses=[],
+                            max_attempts=3,
+                        ),
+                    ],
+                    final_answer="4",
+                    open_approach=True,
+                    recommended_problem_role=ProblemRole.REINFORCEMENT,
+                    max_approach_trial=2,
+                )
+            ],
+            current_problem_id=101,
+            problem_state={
+                101: PerProblemState(
+                    current_approach_id=1,
+                    approach_list=[
+                        ApproachState(
+                            reasoning="first approach",
+                            attempts_made=1,
+                            last_solution_proximity=0.1,
+                            outcome="switched_after_limit",
+                        ),
+                        ApproachState(
+                            reasoning="active approach",
+                            attempts_made=1,
+                            last_solution_proximity=0.4,
+                            outcome="active",
+                        ),
+                    ],
+                    approach_trial_count=2,
+                )
+            },
+        )
+
+        evaluate_input = FullPipeline._build_evaluate_input(
+            request=_request(
+                is_submission=True,
+                submission_data=SubmissionData(status=False, is_progress_farm=(False, 0)),
+            ),
+            classify_output=None,
+            ground_output=GroundOutput(
+                approach_verdict=ApproachVerdict.INCORRECT,
+                matched_approach_id=1,
+                matched_weakness="needs more work",
+                judge_confidence=0.7,
+                explanation="incorrect",
+            ),
+            session_metadata=metadata,
+            history_msg=[],
+        )
+
+        self.assertEqual(evaluate_input.attempts_made, 1)
+        self.assertEqual(evaluate_input.max_attempts, 3)
+
+    async def test_build_evaluate_input_falls_back_to_ground_matched_approach(self):
+        metadata = SessionMetadata(
+            session_id="session-1",
+            problem_list=[
+                Problem(
+                    problem_id=101,
+                    question="Solve the problem and report one number.",
+                    approach_list=[
+                        Approach(
+                            summary="Method A",
+                            bloom_level=BloomLevel.APPLY,
+                            concept_type_used=[ConceptType.METHOD],
+                            pattern=ExercisePattern(
+                                cognitive_operation=[],
+                                representation=[Representation.SYMBOLIC],
+                                constraints=[Constraint.NONE],
+                            ),
+                            approach_answer="2",
+                            strengths=[],
+                            weaknesses=[],
+                            max_attempts=1,
+                        ),
+                        Approach(
+                            summary="Method B",
+                            bloom_level=BloomLevel.APPLY,
+                            concept_type_used=[ConceptType.METHOD],
+                            pattern=ExercisePattern(
+                                cognitive_operation=[],
+                                representation=[Representation.SYMBOLIC],
+                                constraints=[Constraint.NONE],
+                            ),
+                            approach_answer="4",
+                            strengths=[],
+                            weaknesses=[],
+                            max_attempts=3,
+                        ),
+                    ],
+                    final_answer="4",
+                    open_approach=True,
+                    recommended_problem_role=ProblemRole.REINFORCEMENT,
+                    max_approach_trial=2,
+                )
+            ],
+            current_problem_id=101,
+            problem_state={
+                101: PerProblemState(
+                    current_approach_id=None,
+                    approach_list=[
+                        ApproachState(
+                            reasoning="old attempt",
+                            attempts_made=1,
+                            last_solution_proximity=0.1,
+                            outcome="switched_after_limit",
+                        ),
+                        ApproachState(
+                            reasoning="matched attempt",
+                            attempts_made=1,
+                            last_solution_proximity=0.4,
+                            outcome="active",
+                        ),
+                    ],
+                    approach_trial_count=4,
+                )
+            },
+        )
+
+        evaluate_input = FullPipeline._build_evaluate_input(
+            request=_request(
+                is_submission=True,
+                submission_data=SubmissionData(status=False, is_progress_farm=(False, 0)),
+            ),
+            classify_output=None,
+            ground_output=GroundOutput(
+                approach_verdict=ApproachVerdict.INCORRECT,
+                matched_approach_id=1,
+                matched_weakness="needs more work",
+                judge_confidence=0.7,
+                explanation="incorrect",
+            ),
+            session_metadata=metadata,
+            history_msg=[],
+        )
+
+        self.assertEqual(evaluate_input.current_approach_id, 1)
+        self.assertEqual(evaluate_input.attempts_made, 1)
+        self.assertEqual(evaluate_input.max_attempts, 3)
+
+    async def test_build_evaluate_input_clamps_legacy_attempts_above_max(self):
+        metadata = SessionMetadata(
+            session_id="session-1",
+            problem_list=[_problem()],
+            current_problem_id=101,
+            problem_state={
+                101: PerProblemState(
+                    current_approach_id=0,
+                    approach_list=[
+                        ApproachState(
+                            reasoning="legacy corrupted state",
+                            attempts_made=5,
+                            last_solution_proximity=0.3,
+                            outcome="active",
+                        )
+                    ],
+                    approach_trial_count=5,
+                )
+            },
+        )
+
+        evaluate_input = FullPipeline._build_evaluate_input(
+            request=_request(
+                is_submission=True,
+                submission_data=SubmissionData(status=False, is_progress_farm=(False, 0)),
+            ),
+            classify_output=None,
+            ground_output=GroundOutput(
+                approach_verdict=ApproachVerdict.INCORRECT,
+                matched_approach_id=0,
+                matched_weakness="needs more work",
+                judge_confidence=0.7,
+                explanation="incorrect",
+            ),
+            session_metadata=metadata,
+            history_msg=[],
+        )
+
+        self.assertEqual(evaluate_input.attempts_made, 3)
+        self.assertEqual(evaluate_input.max_attempts, 3)
+
+    async def test_build_evaluate_input_allows_missing_approach_resolution(self):
+        metadata = SessionMetadata(
+            session_id="session-1",
+            problem_list=[_problem()],
+            current_problem_id=101,
+            problem_state={
+                101: PerProblemState(
+                    current_approach_id=None,
+                    approach_list=[],
+                    approach_trial_count=2,
+                )
+            },
+        )
+
+        evaluate_input = FullPipeline._build_evaluate_input(
+            request=_request(
+                is_submission=True,
+                submission_data=SubmissionData(status=False, is_progress_farm=(False, 0)),
+            ),
+            classify_output=None,
+            ground_output=GroundOutput(
+                approach_verdict=ApproachVerdict.NOT_AN_ANSWER,
+                matched_approach_id=None,
+                matched_weakness=None,
+                judge_confidence=0.6,
+                explanation="not enough information",
+            ),
+            session_metadata=metadata,
+            history_msg=[],
+        )
+
+        self.assertIsNone(evaluate_input.current_approach_id)
+        self.assertEqual(evaluate_input.current_approach_reasoning, "")
+        self.assertEqual(evaluate_input.attempts_made, 2)
+
+    async def test_state_writer_assigns_submission_to_matched_approach_when_current_missing(self):
+        layer = StateWriterLayer()
+        metadata = SessionMetadata(problem_list=[_problem()], current_problem_id=101)
+        metadata.problem_state[101] = PerProblemState(current_approach_id=None, approach_list=[])
+
+        updated = await layer.execute(
+            session_metadata=metadata,
+            classify_output=None,
+            decide_output=None,
+            evaluate_output=None,
+            ground_output_if_submission=GroundOutput(
+                approach_verdict=ApproachVerdict.INCORRECT,
+                matched_approach_id=0,
+                matched_weakness="missed detail",
+                judge_confidence=0.8,
+                explanation="incorrect",
+            ),
+            request=_request(
+                is_submission=True,
+                submission_data=SubmissionData(status=False, is_progress_farm=(False, 0)),
+            ),
+        )
+
+        self.assertEqual(updated.problem_state[101].current_approach_id, 0)
+        self.assertEqual(updated.problem_state[101].approach_list[0].attempts_made, 1)
 
 
 if __name__ == "__main__":
