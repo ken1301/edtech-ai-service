@@ -108,12 +108,21 @@ class ChatbotUseCase:
                     )
                     history_msg = history_msg[MSG_TO_COMPRESS:]
 
+                user_msg_obj = Message(
+                    role=Role.USER, 
+                    content=request.user_msg, 
+                    is_submission=request.is_submission,
+                    correlation_id=correlation_id,
+                )
+                history_msg.append(user_msg_obj)
+
                 response_content, updated_metadata, token_usage = await self._orchestration.process(
                     request=request,
                     history_msg=history_msg,
                     session_metadata=metadata,
                 )
 
+                assistant_msg_obj = Message(role=Role.ASSISTANT, content=response_content, correlation_id=correlation_id)
                 updated_metadata = self._session_manager.complete_lesson2_chat_request(
                     metadata=updated_metadata,
                     correlation_id=correlation_id,
@@ -121,8 +130,6 @@ class ChatbotUseCase:
                     response_usage=token_usage,
                 )
 
-                user_msg_obj = Message(role=Role.USER, content=request.user_msg, correlation_id=correlation_id)
-                assistant_msg_obj = Message(role=Role.ASSISTANT, content=response_content, correlation_id=correlation_id)
                 updated_metadata.turn_count += 1
                 await self._session_manager.redis_save_turn_with_metadata(
                     session_id=session_id,
