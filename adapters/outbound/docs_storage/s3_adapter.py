@@ -31,7 +31,7 @@ class S3Adapter(CloudPort):
 
     def __init__(self, s3_client: Any | None = None, bucket_name: str | None = None):
         self.s3_client = s3_client or boto3.client("s3")
-        self._bucket_name = bucket_name or os.getenv("MINIO_BUCKET_NAME") or os.getenv("S3_BUCKET_NAME") or "documents"
+        self._bucket_name = bucket_name or os.getenv("MINIO_BUCKET_NAME") or os.getenv("S3_BUCKET_NAME") or "edtech"
         self._max_document_bytes = int(
             os.getenv("AI_SERVICE_MAX_DOCUMENT_BYTES", str(self._DEFAULT_MAX_DOCUMENT_BYTES))
         )
@@ -62,9 +62,13 @@ class S3Adapter(CloudPort):
         key = parsed.path.lstrip("/") or document_url.lstrip("/")
         if key.startswith(f"{self._bucket_name}/"):
             key = key[len(self._bucket_name) + 1 :]
+        if key.startswith("uploads/"):
+            key = key[len("uploads/") :]
         return key
 
     def _assert_user_scope(self, key: str, user_id: str) -> None:
+        if key.startswith("uploads/"):
+            key = key[len("uploads/") :]
         expected_prefix = f"{self._USER_PREFIX}/{quote(user_id, safe='')}/"
         if not key.startswith(expected_prefix):
             raise CloudAdapterError("Document key does not belong to the authenticated user.")
