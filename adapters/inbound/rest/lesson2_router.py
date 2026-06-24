@@ -202,8 +202,6 @@ async def select_exercises(
     adaptive_learning_service: AdaptiveLearningService = Depends(Provide[Container.adaptive_learning_service]),
 ) -> List[Problem]:
     try:
-        print("Received exercise selection request:", request)
-
         user_id = enforce_authenticated_user_id(authenticated_user.user_id, request.user_id)
         student_profile = await profile_manager.get_student_profile(
             user_id=user_id,
@@ -217,8 +215,13 @@ async def select_exercises(
             exercise=exercises,
         ) # -> Lesson2Exercises
 
-        print("Selected exercises:", selected_exercises.ordered_problem_list())
-        return selected_exercises.ordered_problem_list()
+        index = 0
+        problem_list = selected_exercises.ordered_problem_list()
+        for problem in problem_list:
+            index += 1
+            problem.problem_id = index
+
+        return problem_list
         
     except ProfileManagerError as e:
         raise HTTPException(
