@@ -199,12 +199,58 @@ class RedisLessonAdapter(LessonStorePort):
         )
         return metadata
 
+    async def delete_lesson_creation_metadata(self, lesson_id: str, user_id: str) -> bool:
+        try:
+            deleted = await self._redis.delete(
+                self._meta_key(lesson_id, user_id),
+                self._durable_meta_key(lesson_id, user_id),
+            )
+            logger.debug(
+                "redis_lesson_adapter.delete_lesson_creation_metadata.completed",
+                log_type="debug",
+                lesson_id=lesson_id,
+                user_id=user_id,
+            )
+            return bool(deleted)
+        except RedisError as e:
+            logger.error(
+                "redis_lesson_adapter.delete_lesson_creation_metadata.failed",
+                log_type="technical",
+                lesson_id=lesson_id,
+                user_id=user_id,
+                error=str(e),
+            )
+            raise LessonStoreError(
+                f"Failed to delete lesson creation metadata for lesson '{lesson_id}' from Redis."
+            ) from e
+        except Exception as e:
+            logger.error(
+                "redis_lesson_adapter.delete_lesson_creation_metadata.unexpected_error",
+                log_type="technical",
+                lesson_id=lesson_id,
+                user_id=user_id,
+                error=str(e),
+                exc_info=True,
+            )
+            raise LessonStoreError(
+                "An unexpected error occurred while deleting lesson creation metadata."
+            ) from e
+
     # --- Methods not implemented in Redis adapter, but required by LessonStorePort interface ---
     async def save_exercise(self, *args, **kwargs):
         raise NotImplementedError("save_exercise is a MongoDB operation.")
 
+    async def get_lesson_artifact(self, *args, **kwargs):
+        raise NotImplementedError("get_lesson_artifact is a MongoDB operation.")
+
     async def get_exercise(self, *args, **kwargs):
         raise NotImplementedError("get_exercise is a MongoDB operation.")
 
+    async def get_public_exercise(self, *args, **kwargs):
+        raise NotImplementedError("get_public_exercise is a MongoDB operation.")
+
     async def delete_exercise(self, *args, **kwargs):
         raise NotImplementedError("delete_exercise is a MongoDB operation.")
+
+    async def attach_root_lesson_id(self, *args, **kwargs):
+        raise NotImplementedError("attach_root_lesson_id is a MongoDB operation.")
