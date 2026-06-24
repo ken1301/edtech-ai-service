@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
+from enum import Enum
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import PyMongoError
+from pydantic import BaseModel
 
 from domain.ports.profile_store_port import ProfileStorePort
 from domain.models.overall_models.profile import (
@@ -74,11 +76,6 @@ class MongoProfileAdapter(ProfileStorePort):
             raise ProfileStoreError("An unexpected error occurred while fetching a student profile.") from e
 
         if not doc:
-            logger.warning(
-                "mongo_profile_store.get_student_profile.completed.not_found",
-                log_type="debug",
-                user_id=user_id,
-            )
             return None
 
         try:
@@ -126,8 +123,8 @@ class MongoProfileAdapter(ProfileStorePort):
 
         update = {
             "$set": {
-                f"knowledge_map.{subject.value}.{topic.value}.{concept.value}": learning_detail.model_dump(),
-                "preferences": student_preference.model_dump(),
+                f"knowledge_map.{subject.value}.{topic.value}.{concept.value}": self._serialize_for_mongo(learning_detail),
+                "preferences": self._serialize_for_mongo(student_preference),
                 "updated_at":  now,
             },
             "$setOnInsert": {
@@ -176,6 +173,35 @@ class MongoProfileAdapter(ProfileStorePort):
             raise ProfileStoreError("An unexpected error occurred while updating a student profile.") from e
 
     # ── helpers ───────────────────────────────────────────────────────────────
+
+    @classmethod
+    def _serialize_for_mongo(cls, value):
+        if isinstance(value, BaseModel):
+            return cls._serialize_for_mongo(value.model_dump(mode="python"))
+
+        if isinstance(value, Enum):
+            return value.value
+
+        if isinstance(value, dict):
+            return {
+                cls._serialize_key_for_mongo(key): cls._serialize_for_mongo(item)
+                for key, item in value.items()
+            }
+
+        if isinstance(value, list):
+            return [cls._serialize_for_mongo(item) for item in value]
+
+        if isinstance(value, tuple):
+            return tuple(cls._serialize_for_mongo(item) for item in value)
+
+        return value
+
+    @classmethod
+    def _serialize_key_for_mongo(cls, key) -> str:
+        serialized_key = cls._serialize_for_mongo(key)
+        if isinstance(serialized_key, str):
+            return serialized_key
+        return str(serialized_key)
 
     @staticmethod
     def _deserialize_profile(doc: dict) -> StudentProfile:
