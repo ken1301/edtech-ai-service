@@ -117,6 +117,8 @@ class StateWriterLayer:
                     distress_level=affect.distress_level.value,
                 )
             )
+        if len(session_metadata.emotion_history) > 4:
+            session_metadata.emotion_history.pop(0)
 
         # Misconceptions: merge perceived signals into the session list (dedup by description).
         existing = {m.description for m in session_metadata.misconception_list}
@@ -199,6 +201,21 @@ class StateWriterLayer:
                 farming_signal=request.submission_data.is_progress_farm,
             )
         )
+
+        matched_approach_id = ground_output.matched_approach_id
+        if matched_approach_id is not None and matched_approach_id >= 0:
+            while len(problem_state.approach_list) <= matched_approach_id:
+                problem_state.approach_list.append(
+                    ApproachState(
+                        reasoning="",
+                        attempts_made=0,
+                        last_solution_proximity=0.0,
+                        outcome="active",
+                    )
+                )
+            if problem_state.current_approach_id is None:
+                problem_state.current_approach_id = matched_approach_id
+
         problem_state.approach_trial_count += 1
         if problem_state.current_approach_id is not None and problem_state.current_approach_id < len(problem_state.approach_list):
             problem_state.approach_list[problem_state.current_approach_id].attempts_made += 1

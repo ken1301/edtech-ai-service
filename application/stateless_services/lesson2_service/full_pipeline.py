@@ -6,8 +6,9 @@ from application.stateless_services.lesson2_service.layers.response_layer import
 from application.stateless_services.lesson2_service.layers.state_writer_layer import StateWriterLayer
 
 from domain.models.overall_models.message import Message
+from domain.models.lesson2_models.common import ResponseClass
 from domain.models.lesson2_models.evaluate import EvaluateInput, EvaluateOutput
-from domain.models.lesson2_models.decide import DecideInput
+from domain.models.lesson2_models.decide import DecideInput, ResponseDirective, ToneArbiterOutput
 from domain.models.lesson2_models.meta import Lesson2Request, PerProblemState, SessionMetadata
 from domain.models.lesson2_models.classify import ClassifyOutput
 from domain.models.lesson2_models.ground import GroundOutput
@@ -17,7 +18,7 @@ from domain.exceptions import Lesson2LayerError, Lesson2PipelineError
 
 from infrastructure.logging import logger
 
-RECENT_MESSAGE_WINDOW = 6
+RECENT_MESSAGE_WINDOW = 10
 TOTAL_PROBLEMS = 4
 DEFAULT_MAX_ATTEMPTS = 3
 
@@ -55,6 +56,8 @@ class FullPipeline:
             evaluate_output = evaluate_layer_response.output
             all_token_usage.append(evaluate_layer_response.usage)
 
+            # print(f"Evaluate Output: {evaluate_output}")
+
             decide_input = self._build_decide_input(
                 request, classify_output, ground_output, evaluate_output, session_metadata, history_msg
             )
@@ -62,13 +65,7 @@ class FullPipeline:
             decide_output = decide_layer_response.output
             all_token_usage.append(decide_layer_response.usage)
 
-            response_input = self._build_response_input(
-                request, classify_output, ground_output, evaluate_output, decide_output, session_metadata, history_msg
-            )
-            response_layer_response = await self._response_layer.execute(
-                response_input, phase=evaluate_output.phase
-            )
-            all_token_usage.append(response_layer_response.usage)
+            # print(f"Decide Output: {decide_output}")
 
             session_metadata = await self._state_writer_layer.execute(
                 session_metadata=session_metadata,
@@ -78,6 +75,14 @@ class FullPipeline:
                 ground_output_if_submission=ground_output,
                 request=request,
             )
+
+            response_input = self._build_response_input(
+                request, classify_output, ground_output, evaluate_output, decide_output, session_metadata, history_msg
+            )
+            response_layer_response = await self._response_layer.execute(
+                response_input, phase=evaluate_output.phase
+            )
+            all_token_usage.append(response_layer_response.usage)
 
             content = response_layer_response.output
 
@@ -106,6 +111,33 @@ class FullPipeline:
             )
             raise Lesson2PipelineError("Failed to process full pipeline.") from e
 
+    async def process_wrap_up(
+        self,
+        session_metadata: SessionMetadata,
+        history_msg: Optional[List[Message]] = None,
+    ) -> tuple[str, Optional[object]]:
+        try:
+            response_input = self._build_wrap_up_response_input(session_metadata, history_msg)
+            response_layer_response = await self._response_layer.execute(response_input)
+            content = response_layer_response.output
+            return (
+                content if isinstance(content, str) else str(content),
+                response_layer_response.usage,
+            )
+
+        except Lesson2LayerError as e:
+            raise Lesson2PipelineError("Failed to generate wrap-up response.") from e
+
+        except Exception as e:
+            logger.error(
+                "full_pipeline.wrap_up.unexpected.failed",
+                log_type="error",
+                session_id=session_metadata.session_id,
+                error=str(e),
+                exc_info=True,
+            )
+            raise Lesson2PipelineError("Failed to generate wrap-up response.") from e
+
     # --- input builders ----------------------------------------------------------
 
     @classmethod
@@ -119,6 +151,7 @@ class FullPipeline:
     ) -> EvaluateInput:
         problem = _current_problem(session_metadata)
         state = _current_state(session_metadata)
+        attempt_approach_id, attempts_made, max_attempts = _attempt_context(problem, state, ground_output)
         return EvaluateInput(
             session_id=session_metadata.session_id,
             recent_messages=(history_msg or [])[-RECENT_MESSAGE_WINDOW:],
@@ -126,10 +159,10 @@ class FullPipeline:
             problem_role=problem.recommended_problem_role if problem else None,
             open_approach=problem.open_approach if problem else False,
             available_approaches=[a.summary for a in problem.approach_list] if problem else [],
-            current_approach_id=state.current_approach_id if state else None,
-            current_approach_reasoning=_current_reasoning(state),
-            attempts_made=_attempts_made(state),
-            max_attempts=_max_attempts(problem),
+            current_approach_id=attempt_approach_id,
+            current_approach_reasoning=_current_reasoning(state, attempt_approach_id),
+            attempts_made=attempts_made,
+            max_attempts=max_attempts,
             is_submission=request.is_submission,
             ground_verdict=ground_output.approach_verdict if ground_output else None,
             matched_weakness=ground_output.matched_weakness if ground_output else None,
@@ -149,6 +182,7 @@ class FullPipeline:
     ) -> DecideInput:
         problem = _current_problem(session_metadata)
         state = _current_state(session_metadata)
+        _, attempts_made, max_attempts = _attempt_context(problem, state, ground_output)
         abuse = list(classify_output.abuse_flags) if classify_output else []
         return DecideInput(
             session_id=session_metadata.session_id,
@@ -161,8 +195,8 @@ class FullPipeline:
             problem_role=problem.recommended_problem_role if problem else None,
             problem_index=_problem_index(session_metadata),
             total_problems=len(session_metadata.problem_list) or TOTAL_PROBLEMS,
-            attempts_made=_attempts_made(state),
-            max_attempts=_max_attempts(problem),
+            attempts_made=attempts_made,
+            max_attempts=max_attempts,
             current_progress=session_metadata.current_progress,
             abuse_flags=abuse,
         )
@@ -180,6 +214,7 @@ class FullPipeline:
     ) -> ResponseInput:
         problem = _current_problem(session_metadata)
         state = _current_state(session_metadata)
+        _, attempts_made, max_attempts = _attempt_context(problem, state, ground_output)
         return ResponseInput(
             response_directive=decide_output.directive,
             phase=evaluate_output.phase,
@@ -194,12 +229,37 @@ class FullPipeline:
             process_state=evaluate_output.process_state,
             solution_proximity=evaluate_output.solution_proximity,
             stuck=evaluate_output.stuck,
-            attempts_made=_attempts_made(state),
-            max_attempts=_max_attempts(problem),
+            attempts_made=attempts_made,
+            max_attempts=max_attempts,
             is_submission=request.is_submission,
             ground_verdict=ground_output.approach_verdict if ground_output else None,
             matched_weakness=ground_output.matched_weakness if ground_output else None,
             classify=classify_output,
+            recent_messages=(history_msg or [])[-RECENT_MESSAGE_WINDOW:],
+        )
+
+    @classmethod
+    def _build_wrap_up_response_input(
+        cls,
+        session_metadata: SessionMetadata,
+        history_msg: Optional[List[Message]],
+    ) -> ResponseInput:
+        problem = _current_problem(session_metadata)
+        directive = ResponseDirective(
+            response_class=ResponseClass.WRAP_UP,
+            tone_arbiter=ToneArbiterOutput(
+                tone="peer",
+                depth="short",
+                must_not_reveal=["final_answer"],
+            ),
+        )
+        return ResponseInput(
+            response_directive=directive,
+            problem_question=problem.question if problem else "",
+            problem_role=problem.recommended_problem_role if problem else None,
+            problem_index=_problem_index(session_metadata),
+            total_problems=len(session_metadata.problem_list) or TOTAL_PROBLEMS,
+            current_progress=session_metadata.current_progress,
             recent_messages=(history_msg or [])[-RECENT_MESSAGE_WINDOW:],
         )
 
@@ -224,18 +284,43 @@ def _current_state(session_metadata: SessionMetadata) -> Optional[PerProblemStat
     return session_metadata.problem_state.get(pid)
 
 
-def _current_reasoning(state: Optional[PerProblemState]) -> str:
-    if state is None or state.current_approach_id is None:
+def _attempt_approach_id(
+    state: Optional[PerProblemState],
+    ground_output: Optional[GroundOutput] = None,
+) -> Optional[int]:
+    if state is not None and state.current_approach_id is not None:
+        return state.current_approach_id
+    if ground_output is not None:
+        return ground_output.matched_approach_id
+    return None
+
+
+def _attempt_context(problem, state: Optional[PerProblemState], ground_output: Optional[GroundOutput] = None) -> tuple[Optional[int], int, int]:
+    approach_id = _attempt_approach_id(state, ground_output)
+    max_attempts = _max_attempts(problem, approach_id)
+    attempts_made = min(_attempts_made(state, approach_id), max_attempts)
+    return approach_id, attempts_made, max_attempts
+
+
+def _current_reasoning(state: Optional[PerProblemState], approach_id: Optional[int] = None) -> str:
+    if state is None:
         return ""
-    aid = state.current_approach_id
+    aid = state.current_approach_id if approach_id is None else approach_id
+    if aid is None:
+        return ""
     if 0 <= aid < len(state.approach_list):
         return state.approach_list[aid].reasoning
     return ""
 
 
-def _attempts_made(state: Optional[PerProblemState]) -> int:
+def _attempts_made(state: Optional[PerProblemState], approach_id: Optional[int] = None) -> int:
     if state is None:
         return 0
+    aid = state.current_approach_id if approach_id is None else approach_id
+    if aid is None:
+        return state.approach_trial_count
+    if aid is not None and 0 <= aid < len(state.approach_list):
+        return state.approach_list[aid].attempts_made
     return state.approach_trial_count
 
 
@@ -249,9 +334,12 @@ def _problem_index(session_metadata: SessionMetadata) -> int:
         return 0
 
 
-def _max_attempts(problem) -> int:
+def _max_attempts(problem, approach_id: Optional[int] = None) -> int:
     if problem is None:
         return DEFAULT_MAX_ATTEMPTS
+    aid = approach_id
+    if aid is not None and 0 <= aid < len(problem.approach_list):
+        return problem.approach_list[aid].max_attempts
     if problem.approach_list:
         return max((a.max_attempts for a in problem.approach_list), default=DEFAULT_MAX_ATTEMPTS)
     return DEFAULT_MAX_ATTEMPTS

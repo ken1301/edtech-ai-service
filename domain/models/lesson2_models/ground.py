@@ -20,7 +20,7 @@ class GroundInput(BaseModel):
     open_approach: bool
     approach_list: List[Approach] = Field(min_length=1, max_length=12)
     student_reasoning: str = Field(default="", max_length=4000)
-    student_submitted_answer: str = Field(min_length=1, max_length=4000)
+    student_submitted_answer: str = Field(default="", max_length=4000)
     result_status: bool
 
 class GroundOutput(BaseModel):

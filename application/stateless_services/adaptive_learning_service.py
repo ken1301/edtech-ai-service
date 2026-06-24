@@ -377,6 +377,9 @@ class AdaptiveLearningService:
                 log_type="business",
             )
 
+            print(f"Merged Preferences: {merged_preferences}")
+            print(f"Merged Learning Detail: {merged_learning_detail}")
+
             return merged_preferences, merged_learning_detail
         
         except (ValueError, TypeError, Exception) as e:

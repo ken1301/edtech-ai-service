@@ -55,6 +55,8 @@ class Lesson2Orchestration:
                 session_id=session_metadata.session_id,
             )
 
+            # print(f"Request: {request}")
+
             all_token_usage: List = []
 
             if request.is_submission:
@@ -62,6 +64,7 @@ class Lesson2Orchestration:
                 ground_output, ground_usage = await self._ground_submission(request, session_metadata)
                 if ground_usage is not None:
                     all_token_usage.append(ground_usage)
+                #print(f"Ground Output: {ground_output}")
             else:
                 classify_output, classify_usage = await self._classify_message(
                     request, session_metadata, history_msg
@@ -69,6 +72,7 @@ class Lesson2Orchestration:
                 if classify_usage is not None:
                     all_token_usage.append(classify_usage)
                 ground_output = None
+                # print(f"Classify Output: {classify_output}")
 
             if classify_output and classify_output.routing == Routing.SAFETY_DIVERT:
                 content, session_metadata, usage = await self._safety_divert.process(
@@ -95,6 +99,16 @@ class Lesson2Orchestration:
                 session_metadata=session_metadata,
                 history_msg=history_msg,
             )
+
+            if self._should_add_wrap_up(request, session_metadata):
+                wrap_up_content, wrap_up_usage = await self._full_pipeline.process_wrap_up(
+                    session_metadata=session_metadata,
+                    history_msg=history_msg,
+                )
+                content = _merge_content(content, wrap_up_content)
+                if wrap_up_usage is not None:
+                    usage.append(wrap_up_usage)
+
             return content, session_metadata, all_token_usage + usage
 
         except Lesson2PipelineError as e:
@@ -124,11 +138,11 @@ class Lesson2Orchestration:
 
         ground_input = GroundInput(
             problem_question=problem.question,
-            problem_final_answer=problem.final_answer,
+            problem_final_answer=problem.final_answer.strip(),
             open_approach=problem.open_approach,
             approach_list=problem.approach_list,
             student_reasoning=_current_reasoning(session_metadata),
-            student_submitted_answer=request.user_msg,
+            student_submitted_answer=request.user_msg.strip() if request.user_msg else "",
             result_status=request.submission_data.status,
         )
         layer_response = await self._ground_layer.execute(ground_input)
@@ -150,6 +164,27 @@ class Lesson2Orchestration:
         )
         layer_response = await self._classify_layer.execute(classify_input)
         return layer_response.output, layer_response.usage
+
+    @staticmethod
+    def _should_add_wrap_up(
+        request: Lesson2Request,
+        session_metadata: SessionMetadata,
+    ) -> bool:
+        if not request.is_submission or request.submission_data is None:
+            return False
+        if not request.submission_data.status:
+            return False
+        if not session_metadata.problem_list:
+            return False
+
+        last_problem_id = session_metadata.problem_list[-1].problem_id
+        if session_metadata.current_problem_id != last_problem_id:
+            return False
+
+        return all(
+            (state := session_metadata.problem_state.get(problem.problem_id)) is not None and state.solved
+            for problem in session_metadata.problem_list
+        )
 
 
 def _current_problem(session_metadata: SessionMetadata):
@@ -174,3 +209,11 @@ def _current_reasoning(session_metadata: SessionMetadata) -> str:
     if 0 <= aid < len(state.approach_list):
         return state.approach_list[aid].reasoning
     return ""
+
+
+def _merge_content(primary: str, secondary: str) -> str:
+    if not primary:
+        return secondary
+    if not secondary:
+        return primary
+    return f"{primary}\n\n{secondary}"

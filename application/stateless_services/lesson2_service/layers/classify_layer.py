@@ -23,7 +23,7 @@ class ClassifyLayer:
 
     @staticmethod
     def _safe_default_output(input: ClassifyInput) -> ClassifyOutput:
-        user_msg = input.user_msg.lower()
+        user_msg = ClassifyLayer._extract_user_msg(input)
         abuse_flags: list[str] = []
 
         if any(marker in user_msg for marker in ["ignore previous", "system prompt", "jailbreak"]):
@@ -41,9 +41,10 @@ class ClassifyLayer:
             routing = Routing.SAFETY_DIVERT
             learning_relevance = 0.0
         else:
-            intent = Intent.LEARNING_DISCUSSION if input.user_msg.strip() else Intent.UNINTELLIGIBLE
-            routing = Routing.FULL_PIPELINE if input.user_msg.strip() else Routing.FAST_PATH_REPLY
-            learning_relevance = 0.5 if input.user_msg.strip() else 0.0
+            has_text = bool(user_msg.strip())
+            intent = Intent.LEARNING_DISCUSSION if has_text else Intent.UNINTELLIGIBLE
+            routing = Routing.FULL_PIPELINE if has_text else Routing.FAST_PATH_REPLY
+            learning_relevance = 0.5 if has_text else 0.0
 
         return ClassifyOutput(
             intent=intent,
@@ -59,6 +60,18 @@ class ClassifyLayer:
             abuse_flags=abuse_flags,
             routing=routing,
         )
+
+    @staticmethod
+    def _extract_user_msg(input: ClassifyInput) -> str:
+        if hasattr(input, 'user_msg') and getattr(input, 'user_msg'):
+            return str(getattr(input, 'user_msg')).lower()
+
+        if input.recent_messages:
+            last_message = input.recent_messages[-1]
+            content = getattr(last_message, 'content', '') or ''
+            return str(content).lower()
+
+        return ''
 
     async def execute(self, input: ClassifyInput) -> Lesson2LayerUsage:
         try:

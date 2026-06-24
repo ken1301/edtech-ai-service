@@ -80,22 +80,17 @@ class ChatbotUseCase:
 
         try:
             async with self._session_manager.session_guard(session_id):
-                metadata, cached_response = await self._session_manager.prepare_lesson2_chat_request(
-                    session_id=session_id,
-                    user_id=user_id,
-                    correlation_id=correlation_id,
-                )
+                metadata = await self._session_manager.redis_get_metadata(session_id)
                 self._if_valid_data(user_id, metadata)
                 request_metadata = metadata
-
-                if cached_response is not None:
-                    return cached_response
 
                 if not metadata.is_active:
                     raise SessionClosedError("This session is closed or expired. Please start a new session to continue.")
 
                 history_msg = await self._session_manager.redis_get_all_messages(session_id)
-
+                for msg in history_msg:
+                    msg.correlation_id = ""  # Clear correlation_id for historical messages
+                    
                 if metadata.turn_count > self.TURN_THRESHOLD:
                     MSG_TO_COMPRESS = self.TURN_TO_COMPRESS * self.MSG_PER_TURN
                     metadata = await self._learning_service.compress_session_history(
@@ -123,12 +118,7 @@ class ChatbotUseCase:
                 )
 
                 assistant_msg_obj = Message(role=Role.ASSISTANT, content=response_content, correlation_id=correlation_id)
-                updated_metadata = self._session_manager.complete_lesson2_chat_request(
-                    metadata=updated_metadata,
-                    correlation_id=correlation_id,
-                    response_content=response_content,
-                    response_usage=token_usage,
-                )
+
 
                 updated_metadata.turn_count += 1
                 await self._session_manager.redis_save_turn_with_metadata(

@@ -10,6 +10,7 @@ class Message(BaseModel):
     content: str
 
     correlation_id: Optional[str] = None
+    is_submission: Optional[bool] = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = {"json_encoders": {datetime: lambda v: v.isoformat()}}

@@ -1,6 +1,5 @@
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Optional
 
 from domain.ports.session_store_port import SessionStorePort
 
@@ -16,8 +15,6 @@ from domain.exceptions import Lesson2SessionConflictError, SessionManagerError, 
 class SessionManager:
     """Service responsible for managing session state, including syncing session data to the database and closing sessions."""
 
-    _SESSION_LOCK_TIMEOUT_SECONDS = 30
-
     def __init__(
         self,
         redis_session_store: SessionStorePort,
@@ -28,23 +25,9 @@ class SessionManager:
         self._session_locks: dict[str, asyncio.Lock] = {}
 
     @asynccontextmanager
-    async def _local_session_guard(self, session_id: str):
+    async def session_guard(self, session_id: str):
         lock = self._session_locks.setdefault(session_id, asyncio.Lock())
         async with lock:
-            yield
-
-    @asynccontextmanager
-    async def session_guard(self, session_id: str):
-        lock_builder = getattr(self._redis_store, "build_session_lock", None)
-        if callable(lock_builder):
-            async with lock_builder(
-                session_id=session_id,
-                timeout_seconds=self._SESSION_LOCK_TIMEOUT_SECONDS,
-            ):
-                yield
-            return
-
-        async with self._local_session_guard(session_id):
             yield
 
     async def prepare_lesson2_chat_request(
@@ -52,7 +35,7 @@ class SessionManager:
         session_id: str,
         user_id: str,
         correlation_id: str,
-    ) -> tuple[Optional[SessionMetadata], Lesson2ChatResponse | None]:
+    ) -> tuple[SessionMetadata, Lesson2ChatResponse | None]:
         """Reserve a session for one chat request or replay the last completed response."""
         metadata = await self.redis_get_metadata(session_id)
 
@@ -67,6 +50,7 @@ class SessionManager:
             return metadata, Lesson2ChatResponse(
                 content=metadata.last_response_content,
                 usage=list(metadata.last_response_usage),
+                correlation_id=correlation_id,
                 current_progress=metadata.last_response_progress,
             )
 
@@ -109,7 +93,7 @@ class SessionManager:
 
     # ================= Redis operations =================
 
-    async def redis_get_metadata(self, session_id: str) -> Optional[SessionMetadata]:
+    async def redis_get_metadata(self, session_id: str) -> SessionMetadata:
         """Get session metadata from Redis."""
         try: 
             metadata = await self._redis_store.get_metadata(session_id)
@@ -161,7 +145,7 @@ class SessionManager:
             )
             raise SessionManagerError("Unexpected error while saving session metadata to Redis.") from e
 
-    async def redis_mark_session_closing(self, session_id: str, user_id: str) -> tuple[Optional[SessionMetadata], bool]:
+    async def redis_mark_session_closing(self, session_id: str, user_id: str) -> tuple[SessionMetadata, bool]:
         """Mark a session as closing exactly once and return (metadata, newly_marked)."""
         try:
             async with self.session_guard(session_id):
@@ -177,8 +161,6 @@ class SessionManager:
 
                 metadata.is_closing = True
                 metadata.is_active = False
-                if metadata.expired_at is None and metadata.created_at is None:
-                    metadata.expired_at = None
                 await self._redis_store.save_metadata(session_id, metadata)
 
             logger.info(
@@ -200,31 +182,6 @@ class SessionManager:
                 exc_info=True,
             )
             raise SessionManagerError("Unexpected error while marking session as closing in Redis.") from e
-
-    async def redis_list_sessions_pending_expiration_sync(self) -> list[SessionMetadata]:
-        """Return expired active sessions that still need sync-and-close processing."""
-        list_sessions = getattr(self._redis_store, "list_sessions_pending_expiration_sync", None)
-        if not callable(list_sessions):
-            return []
-
-        try:
-            sessions = await list_sessions()
-            logger.info(
-                "session_manager.redis_list_sessions_pending_expiration_sync.completed",
-                log_type="business",
-                session_count=len(sessions),
-            )
-            return sessions
-        except SessionStoreError as e:
-            raise SessionManagerError("Failed to scan Redis for expired sessions pending sync.") from e
-        except Exception as e:
-            logger.error(
-                "session_manager.redis_list_sessions_pending_expiration_sync.unexpected.failed",
-                log_type="technical",
-                error=str(e),
-                exc_info=True,
-            )
-            raise SessionManagerError("Unexpected error while scanning Redis for expired sessions pending sync.") from e
 
     async def redis_get_all_messages(self, session_id: str) -> list[Message]:
         """Get the full message history for a session from Redis."""
