@@ -2,7 +2,7 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16
-    container_name: 'ai-service-postgres'
+    container_name: 'edtech-postgres'
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -22,7 +22,7 @@ services:
 
   cache:
     image: 'redis/redis-stack:latest'
-    container_name: 'ai-service-redis'
+    container_name: 'edtech-redis'
     restart: always
     volumes:
       - redis_data:/data
@@ -41,7 +41,7 @@ services:
 
   mongodb:
     image: mongo:latest
-    container_name: 'ai-service-mongodb'
+    container_name: 'edtech-mongodb'
     restart: always
     volumes:
       - mongo_data:/data/db
@@ -60,7 +60,7 @@ services:
 
   mongo-express:
     image: mongo-express:latest
-    container_name: 'ai-service-mongo-ui'
+    container_name: 'edtech-mongo-ui'
     restart: always
     ports:
       - '8081:8081'
@@ -74,72 +74,9 @@ services:
       mongodb:
         condition: service_healthy
 
-  # Monitoring Stack
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: 'ai-service-prometheus'
-    restart: always
-    volumes:
-      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    ports:
-      - '9090:9090'
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-    networks:
-      - ai-service-network
-
-  loki:
-    image: grafana/loki:2.9.8
-    container_name: 'ai-service-loki'
-    restart: always
-    ports:
-      - '3100:3100'
-    volumes:
-      - ./config/loki-config.yml:/etc/loki/local-config.yml
-      - loki_data:/loki
-    command: -config.file=/etc/loki/local-config.yml
-    networks:
-      - ai-service-network
-
-  promtail:
-    image: grafana/promtail:latest
-    container_name: 'ai-service-promtail'
-    restart: always
-    volumes:
-      - /var/log:/var/log
-      - ./app.log:/app.log
-      - ./config/promtail-config.yml:/etc/promtail/config.yml
-    command: -config.file=/etc/promtail/config.yml
-    networks:
-      - ai-service-network
-    depends_on:
-      - loki
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: 'ai-service-grafana'
-    restart: always
-    ports:
-      - '3000:3000'
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
-      GF_INSTALL_PLUGINS: 'grafana-piechart-panel'
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./config/grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml
-      - ./config/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
-      - ./dashboards:/var/lib/grafana/dashboards
-    networks:
-      - ai-service-network
-    depends_on:
-      - prometheus
-      - loki
-
   minio:
     image: minio/minio:latest
-    container_name: 'ai-service-minio'
+    container_name: 'edtech-minio'
     restart: always
     ports:
       - '${MINIO_API_PORT}:9000'
@@ -159,8 +96,5 @@ volumes:
   postgres_data:
   redis_data:
   mongo_data:
-  prometheus_data:
-  loki_data:
-  grafana_data:
   minio_data:
 
