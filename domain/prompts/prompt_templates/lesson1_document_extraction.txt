@@ -109,7 +109,7 @@ exercises: list of 5–10 foundational, auto-checkable questions for Lesson 1 se
     options: list of strings (REQUIRED for multiple_choice; omit or use [] otherwise),
     answer: string — the correct answer:
       multiple_choice → the option text (not index)
-      fill_in_the_blank → the missing token(s)
+      fill_in_the_blank → a numeric string only (integer or decimal) representing the single missing value requested by the question
       true_false → "true" or "false"
       short_answer → the expected answer,
     explanation: string — 1–2 sentences explaining why this answer is correct,
@@ -154,4 +154,6 @@ summary: compact carryover note for Lesson 2 preparation.
 11. BLOOM BALANCE: Keep majority at remember/understand/apply — this is foundation building, not a final exam.
 12. ENUMS: All enum fields must use the exact lowercase string values listed above.
 13. OUTPUT: Content output language must be preserved in only the knowledge and exercises. 
+14. NUMERIC BLANKS ONLY: Every fill_in_the_blank exercise must be written so its answer is exactly one numeric string (int or float only). Do not ask for words, symbolic expressions, units, ordered pairs, or multiple values.
+15. PRESERVE DIFFICULTY BY REFRAMING: If the natural answer would contain multiple numbers, a formula, or a symbolic expression, keep the same underlying reasoning difficulty but rewrite the question so the final response is one number. Examples: ask for the sum/product/difference of two solved values, ask for a specific coefficient or constant from a derived formula, ask for the evaluated numeric result at a stated input.
 </rules>
