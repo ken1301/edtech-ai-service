@@ -9,7 +9,7 @@ from adapters.outbound.cache.redis_session_adapter import RedisSessionAdapter
 from adapters.outbound.llm.factory import llm_factory
 from adapters.outbound.persistence.mongo_profile_store import MongoProfileAdapter
 from adapters.outbound.persistence.mongo_session_store import MongoSessionAdapter
-from adapters.outbound.persistence.mongo_exercise_store import MongoExerciseAdapter
+from adapters.outbound.persistence.mongo_lesson_store import MongoLessonAdapter
 from adapters.outbound.docs_storage.s3_adapter import S3Adapter
 
 from application.services.lesson_manager import LessonManager
@@ -17,6 +17,7 @@ from application.stateless_services.adaptive_learning_service import AdaptiveLea
 from application.stateless_services.docs_transform import PDFToMarkdownTransformer
 from application.stateless_services.prompt_builder import PromptBuilder
 from application.services.cloud_manager import CloudManager
+from application.services.legacy_exercise_job_service import LegacyExerciseJobService
 from application.services.session_manager import SessionManager
 from application.services.profile_manager import ProfileManager
 from application.stateless_services.llm_manager import LLMManager
@@ -35,6 +36,7 @@ from application.stateless_services.lesson2_service.orchestration import Lesson2
 
 from application.use_cases.chatbot_usecase import ChatbotUseCase
 from application.use_cases.create_lesson_usecase import CreateLessonUseCase
+from adapters.inbound.queue.bullmq_worker import BullMQExerciseWorkerAdapter
 from infrastructure.config import Settings
 
 def create_mongo_client(config: Settings) -> AsyncIOMotorClient:
@@ -141,7 +143,7 @@ class Container(containers.DeclarativeContainer):
     )
 
     exercise_store = providers.Singleton(
-        MongoExerciseAdapter,
+        MongoLessonAdapter,
         db=mongo_database,
     )
 
@@ -299,4 +301,21 @@ class Container(containers.DeclarativeContainer):
         lesson_manager=lesson_manager,
         prompt_builder=prompt_builder,
         pdf_to_markdown_transformer=docs_transformer,
+    )
+
+    legacy_exercise_job_processor = providers.Singleton(
+        LegacyExerciseJobService,
+        lesson_creation_manager=lesson_creation_manager,
+    )
+
+    bullmq_exercise_worker = providers.Factory(
+        BullMQExerciseWorkerAdapter,
+        job_processor=legacy_exercise_job_processor,
+        redis_url=config.provided.LOCAL_REDIS_URL,
+        redis_password=config.provided.REDIS_PASSWORD,
+        queue_name=config.provided.BULLMQ_QUEUE_NAME,
+        job_name=config.provided.BULLMQ_JOB_NAME,
+        prefix=config.provided.BULLMQ_PREFIX,
+        concurrency=config.provided.BULLMQ_CONCURRENCY,
+        worker_name=config.provided.BULLMQ_WORKER_NAME,
     )

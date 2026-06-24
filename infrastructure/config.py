@@ -45,8 +45,19 @@ class Settings(BaseSettings):
     # Expiration sweep worker
     SESSION_EXPIRATION_SWEEP_SECONDS: int = 30
 
+    # BullMQ legacy exercise worker
+    BULLMQ_QUEUE_NAME: str = "exercises"
+    BULLMQ_JOB_NAME: str = "extract-exercise"
+    BULLMQ_PREFIX: str = "bull"
+    BULLMQ_WORKER_NAME: str = "ai-service"
+    BULLMQ_CONCURRENCY: int = 1
+
     # LLM resilience
+<<<<<<< HEAD
     LLM_REQUEST_TIMEOUT_SECONDS: float = 120.0
+=======
+    LLM_REQUEST_TIMEOUT_SECONDS: float = 60.0
+>>>>>>> 5776a7b (fix (bullmq): add bullmq config and container)
     LLM_MAX_RETRIES: int = 1
     LLM_RETRY_BACKOFF_SECONDS: float = 0.1
 
@@ -78,6 +89,8 @@ class Settings(BaseSettings):
             raise ValueError("LLM_MAX_RETRIES must be greater than or equal to 0")
         if self.LLM_RETRY_BACKOFF_SECONDS < 0:
             raise ValueError("LLM_RETRY_BACKOFF_SECONDS must be greater than or equal to 0")
+        if self.BULLMQ_CONCURRENCY <= 0:
+            raise ValueError("BULLMQ_CONCURRENCY must be greater than 0")
 
         return self
 
