@@ -149,11 +149,6 @@ class SessionMetadata(BaseModel):
     is_closing: bool = False
     expired_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None
-    active_correlation_id: Optional[str] = None
-    last_completed_correlation_id: Optional[str] = None
-    last_response_content: Optional[str] = None
-    last_response_usage: List[Any] = Field(default_factory=list)
-    last_response_progress: Optional[float] = None
 
     @model_validator(mode="after")
     def validate_semantics(self) -> "SessionMetadata":
@@ -180,9 +175,6 @@ class SessionMetadata(BaseModel):
 
         if self.closed_at is not None and self.is_active:
             raise ValueError("closed sessions cannot remain active")
-
-        if self.last_response_progress is not None and not 0.0 <= self.last_response_progress <= 100.0:
-            raise ValueError("last_response_progress must be between 0 and 100")
 
         return self
 
