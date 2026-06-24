@@ -49,7 +49,7 @@ class LLMProviderInstrumentationTests(unittest.IsolatedAsyncioTestCase):
         started_call = debug_log.call_args_list[0]
         self.assertEqual(started_call.args[0], "groq_adapter.generate_response.started")
         self.assertTrue(started_call.kwargs["structured_output"])
-        self.assertEqual(started_call.kwargs["response_model"], "StructuredResponse")
+        self.assertEqual(started_call.kwargs["response_model"], _StructuredResponse.__name__)
         self.assertEqual(started_call.kwargs["message_count"], 2)
         self.assertEqual(started_call.kwargs["message_chars"], len("student answer"))
 
