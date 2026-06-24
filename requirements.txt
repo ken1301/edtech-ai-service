@@ -20,6 +20,7 @@ instructor
 
 # Cache
 redis>=5.0.0
+bullmq>=2.25.2
 
 # Database
 motor>=3.3.0

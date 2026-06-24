@@ -23,11 +23,13 @@ setup(
         "groq>=0.4.0",
         "openai>=1.0.0",
         "redis>=5.0.0",
+        "bullmq>=2.25.2",
         "motor>=3.3.0",
     ],
     entry_points={
         "console_scripts": [
             "ai-service=__main__:main",
+            "ai-service-bullmq-worker=adapters.inbound.queue.main:main",
         ],
     },
 )
