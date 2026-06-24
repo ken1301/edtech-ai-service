@@ -259,7 +259,7 @@ class LessonStoreOwnershipTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(collection.update_one_calls[1][0], {"exercise_id": "exercise-1", "user_id": "user-1"})
         self.assertEqual(collection.update_one_calls[1][1]["$set"]["root_lesson_id"], "lesson-1")
         self.assertEqual(collection.find_one_calls[0], {"exercise_id": "exercise-1", "user_id": "user-1"})
-        self.assertEqual(collection.find_one_calls[1], {"exercise_id": "exercise-1", "user_id": "user-1"})
+        self.assertEqual(collection.find_one_calls[1], {"exercise_id": "exercise-1"})
         self.assertEqual(collection.delete_one_calls[0], {"exercise_id": "exercise-1", "user_id": "user-1"})
 
     async def test_mongo_public_exercise_query_uses_published_lesson_lookup_without_user_scope(self):

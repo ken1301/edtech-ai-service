@@ -204,6 +204,7 @@ class Lesson2Phase1Tests(unittest.IsolatedAsyncioTestCase):
             submission_data=SubmissionData(status=False, is_progress_farm=(True, 2)),
         )
         ground_output = GroundOutput(
+            result_verdict=False,
             approach_verdict=ApproachVerdict.INCORRECT,
             matched_approach_id=0,
             matched_weakness="missed detail",
@@ -230,6 +231,7 @@ class Lesson2Phase1Tests(unittest.IsolatedAsyncioTestCase):
                 session_id="session-1",
                 classify_output=None,
                 ground_output=GroundOutput(
+                    result_verdict=False,
                     approach_verdict=ApproachVerdict.INCORRECT,
                     matched_approach_id=0,
                     matched_weakness="weak",
@@ -262,6 +264,7 @@ class Lesson2Phase1Tests(unittest.IsolatedAsyncioTestCase):
             submission_data=SubmissionData(status=True, is_progress_farm=(False, 0)),
         )
         ground_output = GroundOutput(
+            result_verdict=True,
             approach_verdict=ApproachVerdict.CORRECT,
             matched_approach_id=0,
             matched_weakness=None,
@@ -292,6 +295,7 @@ class Lesson2Phase1Tests(unittest.IsolatedAsyncioTestCase):
             submission_data=SubmissionData(status=False, is_progress_farm=(True, 3)),
         )
         ground_output = GroundOutput(
+            result_verdict=False,
             approach_verdict=ApproachVerdict.INCORRECT,
             matched_approach_id=0,
             matched_weakness="guessing",
@@ -429,6 +433,7 @@ class Lesson2Phase1Tests(unittest.IsolatedAsyncioTestCase):
                 (),
                 {
                     "output": GroundOutput(
+                        result_verdict=True,
                         approach_verdict=ApproachVerdict.CORRECT,
                         matched_approach_id=0,
                         matched_weakness=None,
@@ -536,6 +541,7 @@ class Lesson2Phase1Tests(unittest.IsolatedAsyncioTestCase):
             ),
             classify_output=None,
             ground_output=GroundOutput(
+                result_verdict=False,
                 approach_verdict=ApproachVerdict.INCORRECT,
                 matched_approach_id=1,
                 matched_weakness="needs more work",
@@ -622,6 +628,7 @@ class Lesson2Phase1Tests(unittest.IsolatedAsyncioTestCase):
             ),
             classify_output=None,
             ground_output=GroundOutput(
+                result_verdict=False,
                 approach_verdict=ApproachVerdict.INCORRECT,
                 matched_approach_id=1,
                 matched_weakness="needs more work",
@@ -664,6 +671,7 @@ class Lesson2Phase1Tests(unittest.IsolatedAsyncioTestCase):
             ),
             classify_output=None,
             ground_output=GroundOutput(
+                result_verdict=False,
                 approach_verdict=ApproachVerdict.INCORRECT,
                 matched_approach_id=0,
                 matched_weakness="needs more work",
@@ -698,6 +706,7 @@ class Lesson2Phase1Tests(unittest.IsolatedAsyncioTestCase):
             ),
             classify_output=None,
             ground_output=GroundOutput(
+                result_verdict=False,
                 approach_verdict=ApproachVerdict.NOT_AN_ANSWER,
                 matched_approach_id=None,
                 matched_weakness=None,
@@ -723,6 +732,7 @@ class Lesson2Phase1Tests(unittest.IsolatedAsyncioTestCase):
             decide_output=None,
             evaluate_output=None,
             ground_output_if_submission=GroundOutput(
+                result_verdict=False,
                 approach_verdict=ApproachVerdict.INCORRECT,
                 matched_approach_id=0,
                 matched_weakness="missed detail",

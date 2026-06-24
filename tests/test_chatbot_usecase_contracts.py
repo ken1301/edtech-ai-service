@@ -132,7 +132,7 @@ class _OrchestrationSuccessStub:
     async def process(self, **kwargs):
         self.calls.append(kwargs)
         metadata = kwargs["session_metadata"]
-        return "response", metadata, []
+        return "response", metadata, [], None
 
 
 class ChatbotUseCaseContractTests(unittest.IsolatedAsyncioTestCase):
@@ -278,7 +278,7 @@ class ChatbotUseCaseContractTests(unittest.IsolatedAsyncioTestCase):
             async def process(self, **kwargs):
                 updated_metadata = kwargs["session_metadata"]
                 updated_metadata.current_progress = 37.5
-                return "response", updated_metadata, [{"tokens": 3}]
+                return "response", updated_metadata, [{"tokens": 3}], None
 
         usecase = ChatbotUseCase(
             session_manager=_SessionManagerStub(metadata),
