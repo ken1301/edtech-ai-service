@@ -7,6 +7,8 @@ from infrastructure.config import Settings
 
 def _settings_overrides(**overrides):
     base = {
+        "JWT_SECRET": "jwt-secret-for-tests",
+        "AI_SERVICE_API_KEY": "internal-key",
         "LOCAL_REDIS_URL": "redis://localhost:6379/0",
         "REDIS_PASSWORD": "password",
         "REDIS_PORT": 6379,

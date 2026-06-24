@@ -53,11 +53,7 @@ class Settings(BaseSettings):
     BULLMQ_CONCURRENCY: int = 1
 
     # LLM resilience
-<<<<<<< HEAD
     LLM_REQUEST_TIMEOUT_SECONDS: float = 120.0
-=======
-    LLM_REQUEST_TIMEOUT_SECONDS: float = 60.0
->>>>>>> 5776a7b (fix (bullmq): add bullmq config and container)
     LLM_MAX_RETRIES: int = 1
     LLM_RETRY_BACKOFF_SECONDS: float = 0.1
 

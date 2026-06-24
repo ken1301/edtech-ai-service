@@ -26,20 +26,14 @@ class _MongoStoreStub:
 
 
 class SessionManagerLockingTests(unittest.IsolatedAsyncioTestCase):
-    async def test_session_guard_prefers_redis_backed_lock_when_available(self):
+    async def test_session_guard_uses_local_lock_even_when_distributed_lock_exists(self):
         redis_store = _RedisStoreWithDistributedLock()
         manager = SessionManager(redis_session_store=redis_store, mongo_session_store=_MongoStoreStub())
 
         async with manager.session_guard("session-1"):
-            pass
+            self.assertIn("session-1", manager._session_locks)
 
-        self.assertEqual(
-            redis_store.calls,
-            [
-                ("session-1", 30, "enter"),
-                ("session-1", 30, "exit"),
-            ],
-        )
+        self.assertEqual(redis_store.calls, [])
 
     async def test_session_guard_falls_back_to_local_lock_when_redis_lock_unavailable(self):
         manager = SessionManager(
