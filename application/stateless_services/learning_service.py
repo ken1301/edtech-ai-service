@@ -143,12 +143,13 @@ class LearningService:
                     session_metadata=metadata,
                 )
                 summarize_prompt = await self._prompt_builder.lesson2_summarize_prompt(**summarize_input.model_dump())
-                session_summary = await self._llm_manager.generate_response(
+                llm_summary_response = await self._llm_manager.generate_response(
                     system_prompt=summarize_prompt,
                     messages=[],
                     conversation_context=self.conversation_context,
                     response_model=SessionSummary
                 )
+                session_summary = llm_summary_response.content
 
                 # 3. Save the student profile to MongoDB
                 student_profile = await self._profile_manager.get_student_profile(user_id=user_id)
